@@ -1,0 +1,12 @@
+# Render 배포 설정 (Blueprint)
+# 이 파일이 있으면 Render가 자동으로 어떻게 실행할지 알아냅니다.
+services:
+  - type: web            # 24시간 상주하는 웹 서비스 (WebSocket 지원)
+    name: coop-park
+    runtime: node
+    plan: free           # 무료 플랜
+    buildCommand: npm install
+    startCommand: npm start
+    envVars:
+      - key: NODE_VERSION
+        value: 20
