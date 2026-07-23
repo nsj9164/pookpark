@@ -242,40 +242,95 @@ function drawKey(k) {
   ctx.restore();
 }
 
+// 색을 밝게/어둡게 (amt<0 이면 어둡게)
+function shade(hex, amt) {
+  const n = parseInt(hex.slice(1), 16);
+  const r = Math.max(0, Math.min(255, ((n >> 16) & 255) + amt));
+  const g = Math.max(0, Math.min(255, ((n >> 8) & 255) + amt));
+  const b = Math.max(0, Math.min(255, (n & 255) + amt));
+  return `rgb(${r},${g},${b})`;
+}
+
+// 커비 스타일의 동글동글 귀여운 캐릭터
 function drawPlayer(x, y, color, name, facing, isMe) {
   ctx.save();
+  const cx = x + P_SIZE / 2;
+  const bob = Math.sin(performance.now() / 280 + x * 0.05) * 1.2;  // 살랑살랑
+  const cy = y + 14 + bob;
+  const r = 15;
+  const dir = facing >= 0 ? 1 : -1;
+  const foot = shade(color, -55);
+
   // 그림자
-  ctx.fillStyle = 'rgba(0,0,0,0.25)';
+  ctx.fillStyle = 'rgba(0,0,0,0.22)';
   ctx.beginPath();
-  ctx.ellipse(x + P_SIZE / 2, y + P_SIZE + 2, P_SIZE / 2, 4, 0, 0, Math.PI * 2);
+  ctx.ellipse(cx, y + P_SIZE + 2, 13, 4, 0, 0, Math.PI * 2);
   ctx.fill();
 
-  // 몸통
-  ctx.fillStyle = color;
-  roundRect(x, y, P_SIZE, P_SIZE, 7); ctx.fill();
+  // 발 (몸통 뒤)
+  ctx.fillStyle = foot;
+  ctx.beginPath();
+  ctx.ellipse(cx - 8, y + P_SIZE - 3 + bob * 0.5, 7, 4.5, -0.25 * dir, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.beginPath();
+  ctx.ellipse(cx + 8, y + P_SIZE - 3 + bob * 0.5, 7, 4.5, 0.25 * dir, 0, Math.PI * 2);
+  ctx.fill();
 
-  // 내 캐릭터 표시 테두리
+  // 팔 (작은 동그라미, 몸통 뒤)
+  ctx.fillStyle = shade(color, -18);
+  ctx.beginPath(); ctx.ellipse(cx - r + 2, cy + 3, 5, 6, 0.4, 0, Math.PI * 2); ctx.fill();
+  ctx.beginPath(); ctx.ellipse(cx + r - 2, cy + 3, 5, 6, -0.4, 0, Math.PI * 2); ctx.fill();
+
+  // 내 캐릭터 표시: 부드러운 링
   if (isMe) {
-    ctx.strokeStyle = '#fff';
+    ctx.strokeStyle = 'rgba(255,255,255,0.9)';
     ctx.lineWidth = 2.5;
-    roundRect(x - 1, y - 1, P_SIZE + 2, P_SIZE + 2, 8); ctx.stroke();
+    ctx.setLineDash([4, 3]);
+    ctx.beginPath(); ctx.arc(cx, cy, r + 3.5, 0, Math.PI * 2); ctx.stroke();
+    ctx.setLineDash([]);
   }
 
-  // 눈
-  ctx.fillStyle = '#fff';
-  const ex = facing >= 0 ? x + 18 : x + 6;
-  ctx.beginPath(); ctx.arc(ex, y + 11, 4.5, 0, Math.PI * 2); ctx.fill();
-  ctx.fillStyle = '#111';
-  ctx.beginPath(); ctx.arc(ex + facing * 1.5, y + 11, 2.2, 0, Math.PI * 2); ctx.fill();
+  // 몸통 (동그란 원)
+  ctx.fillStyle = color;
+  ctx.beginPath(); ctx.arc(cx, cy, r, 0, Math.PI * 2); ctx.fill();
+
+  // 광택 하이라이트 (왼쪽 위)
+  ctx.fillStyle = 'rgba(255,255,255,0.28)';
+  ctx.beginPath(); ctx.ellipse(cx - 5, cy - 6, 5.5, 4, -0.5, 0, Math.PI * 2); ctx.fill();
+
+  // 볼터치 (분홍)
+  ctx.fillStyle = 'rgba(255,120,150,0.55)';
+  ctx.beginPath(); ctx.ellipse(cx - 8 * dir, cy + 3, 3.2, 2.2, 0, 0, Math.PI * 2); ctx.fill();
+  ctx.beginPath(); ctx.ellipse(cx + 4 * dir, cy + 3, 3.2, 2.2, 0, 0, Math.PI * 2); ctx.fill();
+
+  // 눈 (세로로 긴 커비 눈 + 반짝임)
+  const eyeY = cy - 3;
+  const ex1 = cx - 3 + dir * 1.5;
+  const ex2 = cx + 3 + dir * 1.5;
+  for (const ex of [ex1, ex2]) {
+    ctx.fillStyle = '#2b3a67';
+    ctx.beginPath(); ctx.ellipse(ex, eyeY, 2.3, 4, 0, 0, Math.PI * 2); ctx.fill();
+    // 흰 반짝임
+    ctx.fillStyle = '#fff';
+    ctx.beginPath(); ctx.ellipse(ex - 0.6, eyeY - 1.6, 0.9, 1.6, 0, 0, Math.PI * 2); ctx.fill();
+    ctx.beginPath(); ctx.arc(ex + 0.6, eyeY + 1.6, 0.7, 0, Math.PI * 2); ctx.fill();
+  }
+
+  // 입 (작은 미소)
+  ctx.strokeStyle = 'rgba(120,40,60,0.7)';
+  ctx.lineWidth = 1.3;
+  ctx.beginPath();
+  ctx.arc(cx + dir * 1.5, cy + 5, 2.4, 0.15 * Math.PI, 0.85 * Math.PI);
+  ctx.stroke();
 
   // 이름표
   ctx.fillStyle = 'rgba(0,0,0,0.5)';
   ctx.font = '600 12px Segoe UI, sans-serif';
   const tw = ctx.measureText(name).width;
-  roundRect(x + P_SIZE / 2 - tw / 2 - 5, y - 20, tw + 10, 16, 5); ctx.fill();
+  roundRect(cx - tw / 2 - 5, y - 22, tw + 10, 16, 5); ctx.fill();
   ctx.fillStyle = '#fff';
   ctx.textAlign = 'center';
-  ctx.fillText(name, x + P_SIZE / 2, y - 8);
+  ctx.fillText(name, cx, y - 10);
   ctx.restore();
 }
 
