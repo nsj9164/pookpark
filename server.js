@@ -129,7 +129,7 @@ function downPlayer(p, lvl, room) {
   }
 }
 // 살아있는 사람이 묘를 '3초 동안' 계속 터치하면 그 자리에서 부활
-const REVIVE_TICKS = 180;   // 3초 (60fps)
+const REVIVE_TICKS = 60;   // 1초 (60fps)
 function reviveByTouch(players) {
   for (const D of players) {
     if (!D.dead) continue;

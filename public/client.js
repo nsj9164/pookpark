@@ -758,13 +758,13 @@ function drawGrave(g) {
     ctx.fillStyle = '#7fe0a0';
     roundRect(barX, barY, barW * prog, 6, 3); ctx.fill();
     ctx.fillStyle = '#bff5d0'; ctx.font = '700 9px Segoe UI, sans-serif'; ctx.textAlign = 'center';
-    ctx.fillText('부활 중… ' + Math.ceil(3 * (1 - prog)) + 's', bx + w / 2, by - 34);
+    ctx.fillText('부활 중…', bx + w / 2, by - 34);
   } else {
     const pulse = 0.5 + 0.5 * Math.sin(performance.now() / 260);
     ctx.globalAlpha = 0.5 + 0.5 * pulse;
     ctx.fillStyle = '#7fe0a0';
     ctx.font = '700 10px Segoe UI, sans-serif'; ctx.textAlign = 'center';
-    ctx.fillText('3초 터치해 부활!', bx + w / 2, by - 30);
+    ctx.fillText('1초 터치해 부활!', bx + w / 2, by - 30);
     ctx.globalAlpha = 1;
   }
   // 닉네임 팻말
