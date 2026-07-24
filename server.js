@@ -117,6 +117,7 @@ function downPlayer(p, lvl, room) {
   p.deadX = offscreen ? lvl.spawn.x : Math.max(4, Math.min(WORLD_W - P_SIZE - 4, p.x));
   p.deadY = offscreen ? lvl.spawn.y : Math.min(p.y, WORLD_H - P_SIZE - 6);
   p.hp = 0; p.trapped = false; p.trapTaps = 0; p.vx = 0; p.vy = 0; p.carrier = -1;
+  p.reviveProgress = 0;
   p.deaths = (p.deaths || 0) + 1;
   // 들고 있던 열쇠는 쓰러진 자리에 떨굼
   if (room) for (const k of room.keys) if (k.holder === p.id) {
@@ -125,16 +126,21 @@ function downPlayer(p, lvl, room) {
     k.x = pos.x; k.y = pos.y;
   }
 }
-// 살아있는 사람이 묘를 터치하면 그 자리에서 부활
+// 살아있는 사람이 묘를 '3초 동안' 계속 터치하면 그 자리에서 부활
+const REVIVE_TICKS = 180;   // 3초 (60fps)
 function reviveByTouch(players) {
-  for (const L of players) {
-    if (L.dead || L.trapped) continue;
-    for (const D of players) {
-      if (D === L || !D.dead) continue;
-      if (overlap(L.x, L.y, P_SIZE, P_SIZE, D.deadX, D.deadY, P_SIZE, P_SIZE)) {
+  for (const D of players) {
+    if (!D.dead) continue;
+    const touched = players.some(L => !L.dead && !L.trapped && L !== D
+      && overlap(L.x, L.y, P_SIZE, P_SIZE, D.deadX, D.deadY, P_SIZE, P_SIZE));
+    if (touched) {
+      D.reviveProgress = (D.reviveProgress || 0) + 1;
+      if (D.reviveProgress >= REVIVE_TICKS) {
         D.dead = false; D.x = D.deadX; D.y = D.deadY;
-        D.vx = 0; D.vy = 0; D.hp = PLAYER_HP; D.blink = 55; D.carrier = -1;
+        D.vx = 0; D.vy = 0; D.hp = PLAYER_HP; D.blink = 55; D.carrier = -1; D.reviveProgress = 0;
       }
+    } else {
+      D.reviveProgress = Math.max(0, (D.reviveProgress || 0) - 3);   // 손 떼면 서서히 감소
     }
   }
 }
@@ -496,7 +502,7 @@ function serializeState(room) {
       charge: room.boss.charge, chargeMax: lvl.boss.chargeMax, flash: room.boss.flash,
     } : null,
     pads: (lvl.boss?.pads || []).map((pd, i) => ({ x: pd.x, y: pd.y, w: pd.w, h: pd.h, lit: !!room.padLit[i], active: !!room.padActive[i] })),
-    graves: [...room.players.values()].filter(p => p.dead).map(p => ({ x: p.deadX, y: p.deadY, name: p.name })),
+    graves: [...room.players.values()].filter(p => p.dead).map(p => ({ x: p.deadX, y: p.deadY, name: p.name, prog: Math.min(1, (p.reviveProgress || 0) / REVIVE_TICKS) })),
     players: [...room.players.values()].map(p => ({
       id: p.id, name: p.name, color: p.color, char: p.char,
       x: Math.round(p.x), y: Math.round(p.y), facing: p.facing,

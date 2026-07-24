@@ -194,7 +194,15 @@ const input = { left: false, right: false, up: false, shoot: false };
 let lastSent = '';
 
 // ---------------- 채팅 ----------------
-const chatInput = $('chatInput'), chatLog = $('chatLog');
+const chatInput = $('chatInput'), chatLog = $('chatLog'), chatBody = $('chatBody'), chatToggle = $('chatToggle');
+let chatUnread = 0;
+function setChatOpen(open) {
+  chatBody.classList.toggle('hidden', !open);
+  $('chatToggleIcon').textContent = open ? '▾' : '▸';
+  if (open) { chatUnread = 0; chatToggle.classList.remove('unread'); $('chatToggleLabel').textContent = '💬 채팅'; }
+}
+chatToggle.onclick = () => setChatOpen(chatBody.classList.contains('hidden'));
+function chatIsOpen() { return !chatBody.classList.contains('hidden'); }
 function addChat(msg) {
   const row = document.createElement('div');
   row.className = 'chatRow';
@@ -207,6 +215,8 @@ function addChat(msg) {
   chatLog.appendChild(row);
   while (chatLog.children.length > 60) chatLog.removeChild(chatLog.firstChild);
   chatLog.scrollTop = chatLog.scrollHeight;
+  // 닫혀 있으면 안 읽음 표시
+  if (!chatIsOpen()) { chatUnread++; chatToggle.classList.add('unread'); $('chatToggleLabel').textContent = `💬 채팅 (${chatUnread})`; }
 }
 function sendChat() {
   const text = chatInput.value.trim();
@@ -222,8 +232,13 @@ chatInput.addEventListener('keydown', (e) => {
 function setKey(e, down) {
   // 채팅 입력 중에는 게임 조작 무시
   if (document.activeElement === chatInput) return;
-  // Enter 로 채팅창 포커스 (게임 중)
-  if (down && e.code === 'Enter' && !game.classList.contains('hidden')) { e.preventDefault(); chatInput.focus(); return; }
+  // Enter 로 채팅창 열고 포커스 (게임 중)
+  if (down && e.code === 'Enter' && !game.classList.contains('hidden')) {
+    e.preventDefault();
+    if (!chatIsOpen()) setChatOpen(true);
+    chatInput.focus();
+    return;
+  }
   let changed = true;
   switch (e.code) {
     case 'ArrowLeft': case 'KeyA': input.left = down; break;
@@ -795,13 +810,24 @@ function drawGrave(g) {
   ctx.strokeStyle = '#4a5062'; ctx.lineWidth = 2;
   ctx.beginPath(); ctx.moveTo(bx + w / 2, by + 8); ctx.lineTo(bx + w / 2, by + 22); ctx.stroke();
   ctx.beginPath(); ctx.moveTo(bx + w / 2 - 5, by + 13); ctx.lineTo(bx + w / 2 + 5, by + 13); ctx.stroke();
-  // 부활 안내 (반짝반짝) — 다가가 터치하면 살아남
-  const pulse = 0.5 + 0.5 * Math.sin(performance.now() / 260);
-  ctx.globalAlpha = 0.5 + 0.5 * pulse;
-  ctx.fillStyle = '#7fe0a0';
-  ctx.font = '700 10px Segoe UI, sans-serif'; ctx.textAlign = 'center';
-  ctx.fillText('터치해 부활!', bx + w / 2, by - 30);
-  ctx.globalAlpha = 1;
+  // 부활 안내 + 3초 홀드 진행바
+  const prog = g.prog || 0;
+  if (prog > 0) {
+    const barW = 40, barX = bx + w / 2 - barW / 2, barY = by - 30;
+    ctx.fillStyle = 'rgba(0,0,0,0.45)';
+    roundRect(barX, barY, barW, 6, 3); ctx.fill();
+    ctx.fillStyle = '#7fe0a0';
+    roundRect(barX, barY, barW * prog, 6, 3); ctx.fill();
+    ctx.fillStyle = '#bff5d0'; ctx.font = '700 9px Segoe UI, sans-serif'; ctx.textAlign = 'center';
+    ctx.fillText('부활 중… ' + Math.ceil(3 * (1 - prog)) + 's', bx + w / 2, by - 34);
+  } else {
+    const pulse = 0.5 + 0.5 * Math.sin(performance.now() / 260);
+    ctx.globalAlpha = 0.5 + 0.5 * pulse;
+    ctx.fillStyle = '#7fe0a0';
+    ctx.font = '700 10px Segoe UI, sans-serif'; ctx.textAlign = 'center';
+    ctx.fillText('3초 터치해 부활!', bx + w / 2, by - 30);
+    ctx.globalAlpha = 1;
+  }
   // 닉네임 팻말
   ctx.fillStyle = 'rgba(0,0,0,0.55)';
   ctx.font = '600 11px Segoe UI, sans-serif';

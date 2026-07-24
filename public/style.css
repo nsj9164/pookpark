@@ -173,3 +173,15 @@ canvas {
 }
 #chatInput:focus { border-color: var(--accent); outline: none; background: rgba(20,24,36,0.98); }
 @media (max-width: 720px) { #chat { width: 220px; } }
+
+/* 채팅 열고 닫기 */
+#chatToggle {
+  pointer-events: auto; align-self: flex-start; cursor: pointer;
+  background: rgba(20,24,36,0.88); border: 1px solid #3a4159; color: var(--text);
+  border-radius: 9px; padding: 6px 11px; font-size: 13px; font-weight: 600;
+}
+#chatToggle:hover { border-color: var(--accent); }
+#chatToggle.unread { border-color: var(--accent2); color: var(--accent2); }
+#chatToggleIcon { color: var(--muted); font-size: 11px; }
+#chatBody { display: flex; flex-direction: column; gap: 6px; }
+#chatBody.hidden { display: none; }
