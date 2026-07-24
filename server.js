@@ -25,6 +25,7 @@ const GRAVITY = 0.7, MOVE_SPEED = 4.2, JUMP_V = -13.5, MAX_FALL = 16;
 const COYOTE = 7;        // 발판에서 떨어진 뒤에도 잠깐 점프 허용
 const JUMP_BUFFER = 7;   // 착지 직전에 미리 누른 점프 기억
 const MAX_JUMPS = 2;     // 이중 점프 (커비처럼 공중에서 한 번 더)
+const BOUNCE_V = -19.5;  // 트램펄린 튕김 세기 (일반 점프보다 훨씬 높이)
 const TAP_ESCAPE = 1;    // 버블 탈출에 필요한 스페이스 횟수
 const COLORS = ['#ff5c5c', '#4ea3ff', '#4ee08a', '#ffd23f', '#c76bff', '#ff9e3f', '#3fe0d0', '#ff6bc0'];
 const CHAR_IDS = ['kirby', 'dog', 'cat', 'bubble', 'bear', 'otter', 'pigeon', 'rabbit'];
@@ -206,9 +207,11 @@ function stepRoom(room) {
   room.gateOpen = gates.map(g => onSwitch(g.sw) || onSwitch(g.sw2));
   const closedGates = gates.filter((g, i) => !room.gateOpen[i]).map(g => ({ x: g.x, y: g.y, w: g.w, h: g.h }));
 
-  const solids = lvl.platforms.concat(curM, closedGates);
+  const tramps = lvl.tramps || [];
+  const solids = lvl.platforms.concat(curM, closedGates, tramps);
   const moverStart = lvl.platforms.length;
-  const moverEnd = moverStart + curM.length;   // 이 범위만 '탈 수 있는' 발판
+  const moverEnd = moverStart + curM.length;         // 이 범위만 '탈 수 있는' 발판
+  const trampStart = moverEnd + closedGates.length;  // 이 이후는 트램펄린(튕김)
 
   // 발판에 탄 플레이어를 함께 이동
   for (const p of players) {
@@ -260,8 +263,9 @@ function stepRoom(room) {
       const s = solids[i];
       if (overlap(p.x, p.y, P_SIZE, P_SIZE, s.x, s.y, s.w, s.h)) {
         if (p.vy > 0) {
-          p.y = s.y - P_SIZE; p.vy = 0; p.onGround = true;
-          if (i >= moverStart && i < moverEnd) p.rideMover = i - moverStart;
+          p.y = s.y - P_SIZE;
+          if (i >= trampStart) { p.vy = BOUNCE_V; p.jumpsLeft = MAX_JUMPS; p.coyote = 0; }  // 트램펄린 튕김
+          else { p.vy = 0; p.onGround = true; if (i >= moverStart && i < moverEnd) p.rideMover = i - moverStart; }
         } else if (p.vy < 0) { p.y = s.y + s.h; p.vy = 0; }
       }
     }
@@ -491,6 +495,7 @@ function serializeState(room) {
     level: room.levelIndex, levelName: lvl.name, totalLevels: LEVELS.length,
     hostId: room.hostId, finished: room.finished,
     platforms: lvl.platforms, movers,
+    tramps: lvl.tramps || [],
     spikes: lvl.spikes || [],
     gates: (lvl.gates || []).map((g, i) => ({
       x: g.x, y: g.y, w: g.w, h: g.h, open: !!room.gateOpen[i],

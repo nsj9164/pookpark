@@ -283,6 +283,9 @@ function render() {
   // 움직이는 발판 (보간)
   if (s.movers) s.movers.forEach((m, i) => drawMover(lerpRect(prevState?.movers?.[i], m, alpha)));
 
+  // 트램펄린 (통통 점프대)
+  if (s.tramps) for (const t of s.tramps) drawTramp(t);
+
   // 협동 게이트 + 스위치
   if (s.gates) for (const g of s.gates) drawGate(g);
 
@@ -789,6 +792,35 @@ function drawHpHearts(x, y, hp) {
     ctx.bezierCurveTo(hx + 4, hy, hx, hy, hx, hy + 2);
     ctx.fill();
   }
+  ctx.restore();
+}
+
+// 트램펄린 (통통 점프대) — 스프링 + 탱탱한 상판
+function drawTramp(t) {
+  ctx.save();
+  const cx = t.x + t.w / 2, topY = t.y, botY = t.y + t.h + 8;
+  // 다리/받침
+  ctx.strokeStyle = '#5a6072'; ctx.lineWidth = 3;
+  ctx.beginPath(); ctx.moveTo(t.x + 6, topY + 6); ctx.lineTo(t.x + 2, botY); ctx.stroke();
+  ctx.beginPath(); ctx.moveTo(t.x + t.w - 6, topY + 6); ctx.lineTo(t.x + t.w - 2, botY); ctx.stroke();
+  // 스프링(지그재그)
+  ctx.strokeStyle = '#8b93a7'; ctx.lineWidth = 2;
+  ctx.beginPath();
+  const n = 4, sw = (t.w - 20) / (n * 2);
+  ctx.moveTo(t.x + 10, botY - 2);
+  for (let i = 0; i < n * 2; i++) ctx.lineTo(t.x + 10 + (i + 1) * sw, (i % 2 ? topY + 8 : botY - 2));
+  ctx.stroke();
+  // 탱탱한 상판
+  const g = ctx.createLinearGradient(0, topY, 0, topY + t.h);
+  g.addColorStop(0, '#ff7aa8'); g.addColorStop(1, '#e0466f');
+  ctx.fillStyle = g;
+  roundRect(t.x, topY, t.w, t.h, t.h / 2); ctx.fill();
+  ctx.fillStyle = 'rgba(255,255,255,0.5)';
+  roundRect(t.x + 5, topY + 2, t.w - 10, 3, 1.5); ctx.fill();
+  // 통통 화살표
+  ctx.fillStyle = 'rgba(255,255,255,0.85)';
+  const ay = topY - 6 + Math.sin(performance.now() / 220 + t.x) * 2;
+  ctx.beginPath(); ctx.moveTo(cx, ay - 6); ctx.lineTo(cx - 5, ay + 1); ctx.lineTo(cx + 5, ay + 1); ctx.closePath(); ctx.fill();
   ctx.restore();
 }
 
