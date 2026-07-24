@@ -24,6 +24,7 @@ const P_SIZE = 30;
 const GRAVITY = 0.7, MOVE_SPEED = 4.2, JUMP_V = -13.5, MAX_FALL = 16;
 const COYOTE = 7;        // 발판에서 떨어진 뒤에도 잠깐 점프 허용
 const JUMP_BUFFER = 7;   // 착지 직전에 미리 누른 점프 기억
+const MAX_JUMPS = 2;     // 이중 점프 (커비처럼 공중에서 한 번 더)
 const TAP_ESCAPE = 1;    // 버블 탈출에 필요한 스페이스 횟수
 const COLORS = ['#ff5c5c', '#4ea3ff', '#4ee08a', '#ffd23f', '#c76bff', '#ff9e3f', '#3fe0d0', '#ff6bc0'];
 const CHAR_IDS = ['kirby', 'dog', 'cat', 'bubble', 'bear', 'otter', 'pigeon', 'rabbit'];
@@ -93,7 +94,7 @@ function respawn(p, lvl) {
   p.x = lvl.spawn.x + (Math.random() * 16 - 8);
   p.y = lvl.spawn.y;
   p.vx = 0; p.vy = 0; p.onGround = false; p.rideMover = -1;
-  p.coyote = 0; p.jumpBuf = 0;
+  p.coyote = 0; p.jumpBuf = 0; p.jumpsLeft = MAX_JUMPS;
   p.trapped = false; p.trapTaps = 0; p.carrier = -1;
   p.dead = false;
 }
@@ -278,13 +279,17 @@ function stepRoom(room) {
     }
   }
 
-  // 점프 (코요테 타임 + 점프 버퍼) — 방향키와 독립. 점프하면 목마에서 내려옴
+  // 점프 (코요테 + 버퍼 + 이중 점프) — 방향키와 독립. 점프하면 목마에서 내려옴
   for (const p of players) {
     if (p.trapped || p.dead) continue;
-    if (p.onGround) p.coyote = COYOTE; else if (p.coyote > 0) p.coyote--;
+    if (p.onGround) { p.coyote = COYOTE; p.jumpsLeft = MAX_JUMPS; } else if (p.coyote > 0) p.coyote--;
     if (p.upEdge) p.jumpBuf = JUMP_BUFFER; else if (p.jumpBuf > 0) p.jumpBuf--;
-    if (p.jumpBuf > 0 && p.coyote > 0) {
-      p.vy = JUMP_V; p.onGround = false; p.coyote = 0; p.jumpBuf = 0; p.carrier = -1;
+    if (p.jumpBuf > 0 && p.coyote > 0 && p.jumpsLeft > 0) {
+      // 1단 점프 (지면/코요테, 버퍼 허용)
+      p.vy = JUMP_V; p.onGround = false; p.coyote = 0; p.jumpBuf = 0; p.carrier = -1; p.jumpsLeft--;
+    } else if (p.upEdge && !p.onGround && p.coyote <= 0 && p.jumpsLeft > 0) {
+      // 공중 이중 점프 (누른 순간 즉시)
+      p.vy = JUMP_V; p.jumpBuf = 0; p.carrier = -1; p.jumpsLeft--;
     }
   }
 
@@ -561,7 +566,7 @@ wss.on('connection', (ws) => {
         input: { left: false, right: false, up: false, shoot: false },
         prevUp: false, prevShoot: false, upEdge: false, shootEdge: false,
         facing: 1, x: 0, y: 0, vx: 0, vy: 0, _px: 0, onGround: false,
-        rideMover: -1, coyote: 0, jumpBuf: 0, blink: 0, deaths: 0,
+        rideMover: -1, coyote: 0, jumpBuf: 0, jumpsLeft: MAX_JUMPS, blink: 0, deaths: 0,
         shootCd: 0, trapped: false, trapTaps: 0, carrier: -1, hp: 5,
         dead: false, deadX: 0, deadY: 0,
       };
