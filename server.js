@@ -321,14 +321,12 @@ function stepRoom(room) {
   }
   room.bubbles = room.bubbles.filter(b => !b.hit && b.life > 0 && b.x > -30 && b.x < WORLD_W + 30);
 
-  // 보스전에서만: 갇힌 사람의 버블을 다른 사람이 건드리면 터지며 사망(다운)
-  if (room.boss) {
-    for (const T of players) {
-      if (!T.trapped) continue;
-      for (const L of players) {
-        if (L === T || L.dead || L.trapped) continue;
-        if (overlap(L.x, L.y, P_SIZE, P_SIZE, T.x - 4, T.y - 4, P_SIZE + 8, P_SIZE + 8)) { downPlayer(T, lvl, room); break; }
-      }
+  // 갇힌 사람의 버블을 다른 사람이 건드리면 터지며 사망(다운) — 모든 스테이지
+  for (const T of players) {
+    if (!T.trapped) continue;
+    for (const L of players) {
+      if (L === T || L.dead || L.trapped) continue;
+      if (overlap(L.x, L.y, P_SIZE, P_SIZE, T.x - 4, T.y - 4, P_SIZE + 8, P_SIZE + 8)) { downPlayer(T, lvl, room); break; }
     }
   }
 
@@ -407,11 +405,10 @@ function stepGoal(room, lvl, players) {
   }
   room.doorOpen = room.keys.length > 0 && room.keys.every(k => k.holder !== null);
 
-  // 문은 '살아있는' 사람만 다 모이면 통과 (다운된 사람은 제외)
-  const living = players.filter(p => !p.dead);
-  if (room.doorOpen && living.length > 0) {
+  // 문은 '전원'이 살아서 다 모여야 통과 (죽은 사람은 부활시켜 데려와야 함)
+  if (room.doorOpen && players.length > 0) {
     const d = lvl.door;
-    const allAtDoor = living.every(p => overlap(p.x, p.y, P_SIZE, P_SIZE, d.x, d.y, d.w, d.h));
+    const allAtDoor = players.every(p => !p.dead && overlap(p.x, p.y, P_SIZE, P_SIZE, d.x, d.y, d.w, d.h));
     if (allAtDoor) {
       room.winTimer += TICK;
       room.message = '클리어! 다음 스테이지로...';
@@ -429,6 +426,7 @@ function stepBoss(room, lvl, players) {
   rb.x = (b.cx - b.w / 2) + Math.sin(rb.moveT * b.wx) * b.ampX;
   rb.y = (b.cy - b.h / 2) + Math.sin(rb.moveT * b.wy) * b.ampY;
   if (rb.x < 0) rb.x = 0; if (rb.x + b.w > WORLD_W) rb.x = WORLD_W - b.w;
+  if (rb.y < 0) rb.y = 0; if (rb.y + b.h > 320) rb.y = 320 - b.h;   // 위/아래 범위 제한
 
   // 보스 몸에 닿으면 체력 1 감소 (0이면 다운)
   for (const p of players) {
@@ -576,6 +574,10 @@ wss.on('connection', (ws) => {
     else if (msg.t === 'restart' && room) {
       room.finished = false;
       loadLevel(room, 0);
+    }
+    else if (msg.t === 'chat' && player && room) {
+      const text = String(msg.text || '').replace(/\s+/g, ' ').trim().slice(0, 120);
+      if (text) broadcast(room, { t: 'chat', id: player.id, name: player.name, color: player.color, text });
     }
     else if (msg.t === 'selectStage' && room && player && player.id === room.hostId) {
       const n = Number(msg.level);

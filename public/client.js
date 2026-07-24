@@ -130,6 +130,8 @@ function connect(code) {
       prevState = curState;
       curState = msg;
       stateTime = performance.now();
+    } else if (msg.t === 'chat') {
+      addChat(msg);
     }
   };
 
@@ -191,7 +193,37 @@ function showToast(text) {
 const input = { left: false, right: false, up: false, shoot: false };
 let lastSent = '';
 
+// ---------------- 채팅 ----------------
+const chatInput = $('chatInput'), chatLog = $('chatLog');
+function addChat(msg) {
+  const row = document.createElement('div');
+  row.className = 'chatRow';
+  const who = document.createElement('span');
+  who.className = 'chatName'; who.style.color = msg.color || '#8b93a7';
+  who.textContent = msg.name + ': ';
+  const txt = document.createElement('span');
+  txt.textContent = msg.text;
+  row.appendChild(who); row.appendChild(txt);
+  chatLog.appendChild(row);
+  while (chatLog.children.length > 60) chatLog.removeChild(chatLog.firstChild);
+  chatLog.scrollTop = chatLog.scrollHeight;
+}
+function sendChat() {
+  const text = chatInput.value.trim();
+  if (text && ws && ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify({ t: 'chat', text }));
+  chatInput.value = '';
+}
+chatInput.addEventListener('keydown', (e) => {
+  e.stopPropagation();
+  if (e.key === 'Enter') { sendChat(); chatInput.blur(); }
+  else if (e.key === 'Escape') { chatInput.value = ''; chatInput.blur(); }
+});
+
 function setKey(e, down) {
+  // 채팅 입력 중에는 게임 조작 무시
+  if (document.activeElement === chatInput) return;
+  // Enter 로 채팅창 포커스 (게임 중)
+  if (down && e.code === 'Enter' && !game.classList.contains('hidden')) { e.preventDefault(); chatInput.focus(); return; }
   let changed = true;
   switch (e.code) {
     case 'ArrowLeft': case 'KeyA': input.left = down; break;

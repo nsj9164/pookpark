@@ -428,7 +428,7 @@ export const LEVELS = [
     door: null,
     boss: {
       hp: 5, w: 120, h: 90,
-      cx: 480, cy: 120, ampX: 320, ampY: 55, wx: 0.009, wy: 0.016,  // 느린 리사주 패턴 이동
+      cx: 480, cy: 150, ampX: 360, ampY: 120, wx: 0.013, wy: 0.021,  // 좌우·위아래로 크게 리사주 이동
       chargeMax: 30,
       pads: [
         { x: 90, y: 496, w: 92, h: 14 },   // 0 바닥 왼
