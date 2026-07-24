@@ -255,10 +255,6 @@ function render() {
     if (heldByPlayer[p.id]) drawHeldKey(pos.x, pos.y, heldByPlayer[p.id]);  // 열쇠 든 사람 표시
   }
 
-  // 내 버블 잔량 표시
-  const me = s.players.find(p => p.id === myId);
-  if (me && me.ammo != null) drawAmmo(me.ammo);
-
   // 배너 (클리어 / 보스 격파)
   if (!s.finished && s.message && (s.doorOpen || s.message.includes('클리어') || s.message.includes('격파'))) {
     drawBanner(s.message);

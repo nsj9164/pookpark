@@ -24,7 +24,6 @@ const P_SIZE = 30;
 const GRAVITY = 0.7, MOVE_SPEED = 4.2, JUMP_V = -13.5, MAX_FALL = 16;
 const COYOTE = 7;        // 발판에서 떨어진 뒤에도 잠깐 점프 허용
 const JUMP_BUFFER = 7;   // 착지 직전에 미리 누른 점프 기억
-const BUBBLE_MAX = 5;    // 한 스테이지에서 쏠 수 있는 버블 수
 const TAP_ESCAPE = 1;    // 버블 탈출에 필요한 스페이스 횟수
 const COLORS = ['#ff5c5c', '#4ea3ff', '#4ee08a', '#ffd23f', '#c76bff', '#ff9e3f', '#3fe0d0', '#ff6bc0'];
 const CHAR_IDS = ['kirby', 'dog', 'cat', 'bubble', 'bear', 'otter', 'pigeon', 'rabbit'];
@@ -73,7 +72,7 @@ function loadLevel(room, index) {
     ? { hp: lvl.boss.hp, maxHp: lvl.boss.hp, x: (lvl.boss.minX + lvl.boss.maxX) / 2,
         dir: 1, charge: 0, hitCd: 0, flash: 0 }
     : null;
-  for (const p of room.players.values()) { respawn(p, lvl); p.bubbleAmmo = BUBBLE_MAX; }
+  for (const p of room.players.values()) respawn(p, lvl);
 }
 
 function respawn(p, lvl) {
@@ -112,6 +111,13 @@ function kill(p, lvl, room) {
 // ---------------- 유틸 ----------------
 function overlap(ax, ay, aw, ah, bx, by, bw, bh) {
   return ax < bx + bw && ax + aw > bx && ay < by + bh && ay + ah > by;
+}
+// 문 근처 안전지대 — 여기 있으면 장애물에 안 죽음
+function nearDoor(p, lvl) {
+  const d = lvl.door;
+  if (!d) return false;
+  const m = 44;
+  return overlap(p.x, p.y, P_SIZE, P_SIZE, d.x - m, d.y - m, d.w + 2 * m, d.h + 2 * m);
 }
 function moverRect(m, tick) {
   const off = Math.sin(tick * m.speed + (m.phase || 0)) * m.dist;
@@ -262,13 +268,11 @@ function stepRoom(room) {
     p.onGround = true; p.coyote = COYOTE;      // 위 사람도 언제든 점프해서 내릴 수 있게
   }
 
-  // 버블 발사 (스테이지당 최대 BUBBLE_MAX발)
+  // 버블 발사 (횟수 제한 없음, 짧은 연사 쿨다운만)
   for (const p of players) {
     if (p.trapped) continue;
     if (p.shootCd > 0) p.shootCd--;
-    if (p.shootEdge && p.shootCd <= 0 && p.bubbleAmmo > 0) {
-      spawnBubble(room, p); p.shootCd = 15; p.bubbleAmmo--;
-    }
+    if (p.shootEdge && p.shootCd <= 0) { spawnBubble(room, p); p.shootCd = 12; }
   }
   // 버블 이동 + 충돌(상대를 가둠)
   for (const b of room.bubbles) { b.x += b.vx; b.life--; }
@@ -289,9 +293,9 @@ function stepRoom(room) {
   // 낙사
   for (const p of players) if (!p.trapped && p.y > WORLD_H + 80) respawn(p, lvl);
 
-  // 가시 (밟으면 죽고 그 사람만 부활, 죽은 자리에 열쇠 남김)
+  // 가시 (밟으면 죽고 그 사람만 부활, 죽은 자리에 열쇠 남김) — 문 근처는 안전
   for (const p of players) {
-    if (p.trapped || p.blink > 0) continue;
+    if (p.trapped || p.blink > 0 || nearDoor(p, lvl)) continue;
     for (const sp of (lvl.spikes || [])) {
       if (overlap(p.x + 4, p.y + 4, P_SIZE - 8, P_SIZE - 8, sp.x, sp.y, sp.w, sp.h)) { kill(p, lvl, room); break; }
     }
@@ -322,9 +326,9 @@ function updateRain(room, lvl, players) {
     }
   }
   for (const f of room.fallers) f.y += f.vy;
-  // 충돌 → 죽음(자리에 열쇠 남김)
+  // 충돌 → 죽음(자리에 열쇠 남김) — 문 근처는 안전
   for (const p of players) {
-    if (p.trapped || p.blink > 0) continue;
+    if (p.trapped || p.blink > 0 || nearDoor(p, lvl)) continue;
     for (const f of room.fallers) {
       if (overlap(p.x + 3, p.y + 3, P_SIZE - 6, P_SIZE - 6, f.x, f.y, f.w, f.h)) {
         kill(p, lvl, room); f.y = WORLD_H + 999; break;
@@ -432,7 +436,6 @@ function serializeState(room) {
       x: Math.round(p.x), y: Math.round(p.y), facing: p.facing,
       blink: p.blink > 0 ? 1 : 0, deaths: p.deaths || 0,
       trapped: p.trapped ? 1 : 0, taps: p.trapTaps || 0,
-      ammo: p.bubbleAmmo,
     })),
   };
 }
@@ -487,7 +490,6 @@ wss.on('connection', (ws) => {
         facing: 1, x: 0, y: 0, vx: 0, vy: 0, _px: 0, onGround: false,
         rideMover: -1, coyote: 0, jumpBuf: 0, blink: 0, deaths: 0,
         shootCd: 0, trapped: false, trapTaps: 0, carrier: -1,
-        bubbleAmmo: BUBBLE_MAX,
       };
       respawn(player, lvl);
       room.players.set(player.id, player);
