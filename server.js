@@ -42,7 +42,7 @@ function makeRoomCode() {
 
 function createRoom(code) {
   const room = {
-    code, players: new Map(), levelIndex: 0, keys: [], doorOpen: false,
+    code, hostId: null, players: new Map(), levelIndex: 0, keys: [], doorOpen: false,
     winTimer: 0, message: '', nextColor: 0, tick: 0,
     fallers: [], fallerId: 1, rainTimer: 0, plateActive: [], boss: null,
     bubbles: [], bubbleId: 1,
@@ -451,7 +451,7 @@ function serializeState(room) {
   return {
     t: 'state',
     level: room.levelIndex, levelName: lvl.name, totalLevels: LEVELS.length,
-    finished: room.finished,
+    hostId: room.hostId, finished: room.finished,
     platforms: lvl.platforms, movers,
     spikes: lvl.spikes || [],
     gates: (lvl.gates || []).map((g, i) => ({
@@ -533,6 +533,7 @@ wss.on('connection', (ws) => {
       };
       respawn(player, lvl);
       room.players.set(player.id, player);
+      if (room.hostId == null) room.hostId = player.id;   // 방을 처음 만든 사람이 방장
       ws.send(JSON.stringify({ t: 'joined', id: player.id, room: code }));
       console.log(`[room ${code}] ${player.name} 입장 (총 ${room.players.size}명)`);
     }
@@ -546,6 +547,14 @@ wss.on('connection', (ws) => {
       room.finished = false;
       loadLevel(room, 0);
     }
+    else if (msg.t === 'selectStage' && room && player && player.id === room.hostId) {
+      const n = Number(msg.level);
+      if (Number.isInteger(n) && n >= 0 && n < LEVELS.length) {
+        room.finished = false;
+        loadLevel(room, n);
+        console.log(`[room ${room.code}] 방장이 스테이지 ${n + 1} 선택`);
+      }
+    }
   });
 
   ws.on('close', () => {
@@ -553,6 +562,11 @@ wss.on('connection', (ws) => {
       // 나간 사람이 들고 있던 열쇠는 원래 자리로 되돌림(게임이 막히지 않게)
       for (const k of room.keys) if (k.holder === player.id) { k.holder = null; k.x = k.hx; k.y = k.hy; }
       room.players.delete(player.id);
+      // 방장이 나가면 남은 사람 중 한 명에게 방장 위임
+      if (room.hostId === player.id) {
+        const next = room.players.keys().next();
+        room.hostId = next.done ? null : next.value;
+      }
       console.log(`[room ${room.code}] ${player.name} 퇴장 (남은 ${room.players.size}명)`);
       stopRoomIfEmpty(room);
     }

@@ -143,3 +143,12 @@ canvas {
 .winStats { color: var(--muted); margin: 6px 0 22px; font-size: 14px; }
 .winCard .primary { min-width: 200px; }
 @keyframes winpop { from { transform: scale(.8); opacity: 0; } to { transform: scale(1); opacity: 1; } }
+
+/* 방장 스테이지 선택 드롭다운 */
+.rightinfo { display: flex; align-items: center; gap: 10px; }
+#stageSelect {
+  background: #1a1f2e; color: var(--text); border: 1px solid #3a4159;
+  border-radius: 8px; padding: 4px 8px; font-size: 12px; max-width: 200px; cursor: pointer;
+}
+#stageSelect.hidden { display: none; }
+#stageSelect:focus { border-color: var(--accent); outline: none; }

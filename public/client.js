@@ -4,6 +4,8 @@
 //  - 게임: 키 입력 전송, 서버 상태를 받아 부드럽게 렌더링(보간)
 // ============================================================
 
+import { LEVELS } from './shared/levels.js';
+
 const $ = (id) => document.getElementById(id);
 const lobby = $('lobby'), game = $('game');
 const canvas = $('canvas'), ctx = canvas.getContext('2d');
@@ -164,6 +166,20 @@ $('restartBtn').onclick = () => {
   if (ws && ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify({ t: 'restart' }));
 };
 
+// 스테이지 선택 (방장만) — 드롭다운 채우기 + 선택 시 서버에 전송
+(function buildStageSelect() {
+  const sel = $('stageSelect');
+  sel.innerHTML = '';
+  LEVELS.forEach((lv, i) => {
+    const o = document.createElement('option');
+    o.value = i; o.textContent = lv.name || `스테이지 ${i + 1}`;
+    sel.appendChild(o);
+  });
+  sel.addEventListener('change', (e) => {
+    if (ws && ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify({ t: 'selectStage', level: Number(e.target.value) }));
+  });
+})();
+
 function showToast(text) {
   const t = $('copyToast');
   t.textContent = text;
@@ -207,6 +223,12 @@ function render() {
   const s = curState;
   $('levelInfo').textContent = `스테이지 ${s.level + 1} / ${s.totalLevels}  ·  ${s.levelName}`;
   const alpha = interpAlpha();
+
+  // 스테이지 선택 드롭다운: 방장에게만 표시, 현재 스테이지로 동기화
+  const isHost = s.hostId === myId;
+  const sel = $('stageSelect');
+  sel.classList.toggle('hidden', !isHost);
+  if (isHost && document.activeElement !== sel) sel.value = String(s.level);
 
   // 플랫폼
   for (const p of s.platforms) drawPlatform(p);
@@ -257,6 +279,7 @@ function render() {
     if (p.trapped) drawTrapBubble(pos.x, pos.y, p.taps, p.id === myId);
     if (heldByPlayer[p.id]) drawHeldKey(pos.x, pos.y, heldByPlayer[p.id]);  // 열쇠 든 사람 표시
     if (s.boss && p.hp != null) drawHpHearts(pos.x, pos.y, p.hp);           // 보스전 체력
+    if (p.id === s.hostId) drawCrown(pos.x, pos.y);                          // 방장 왕관
   }
 
   // 배너 (클리어 / 보스 격파)
@@ -633,6 +656,25 @@ function drawHeldKey(x, y, count) {
     ctx.fillText('×' + count, cx + 8, cy + 4);
     ctx.restore();
   }
+}
+
+// 방장 왕관 (이름표 왼쪽 위에 작게)
+function drawCrown(x, y) {
+  ctx.save();
+  const bx = x + P_SIZE / 2 - 8, by = y - 30;
+  ctx.fillStyle = '#ffd23f';
+  ctx.beginPath();
+  ctx.moveTo(bx, by + 7);
+  ctx.lineTo(bx, by + 1);
+  ctx.lineTo(bx + 4, by + 4);
+  ctx.lineTo(bx + 8, by - 2);
+  ctx.lineTo(bx + 12, by + 4);
+  ctx.lineTo(bx + 16, by + 1);
+  ctx.lineTo(bx + 16, by + 7);
+  ctx.closePath(); ctx.fill();
+  ctx.fillStyle = '#e0a800';
+  ctx.fillRect(bx, by + 6, 16, 2);
+  ctx.restore();
 }
 
 // 묘비 (닉네임 새김) — 체력 다 닳아 죽은 자리
