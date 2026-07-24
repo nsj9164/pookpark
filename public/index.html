@@ -50,8 +50,19 @@
     <canvas id="canvas" width="960" height="540"></canvas>
 
     <div id="hint">
-      이동: <b>← →</b> / <b>A D</b> &nbsp;·&nbsp; 점프: <b>↑ / W / Space</b> &nbsp;·&nbsp; 버블 발사: <b>F</b>
-      <br>친구 <b>머리를 밟고</b> 높은 곳으로 (같이 이동!) &nbsp;·&nbsp; <b>버블</b>에 갇히면 <b>스페이스 10번</b>으로 탈출 &nbsp;·&nbsp; 모두 열쇠 먹고 <b>문</b>으로!
+      이동: <b>← →</b> / <b>A D</b> &nbsp;·&nbsp; 점프: <b>↑ / W / Space</b> &nbsp;·&nbsp; 버블 발사: <b>F</b> (스테이지당 5발)
+      <br>친구 <b>머리를 밟고</b> 높은 곳으로 (같이 이동!) &nbsp;·&nbsp; <b>버블</b>에 갇히면 <b>스페이스</b>로 탈출 &nbsp;·&nbsp; 모두 열쇠 먹고 <b>문</b>으로!
+    </div>
+  </div>
+
+  <!-- 전체 클리어 승리 화면 -->
+  <div id="winScreen" class="hidden">
+    <div class="winCard">
+      <div class="winEmoji">🎉🏆🎉</div>
+      <h1>전체 클리어!!!</h1>
+      <p class="sub">리얼 보스까지 다 깼어요! 최고의 팀워크 👏</p>
+      <p id="winStats" class="winStats"></p>
+      <button id="restartBtn" class="primary">처음부터 다시</button>
     </div>
   </div>
 

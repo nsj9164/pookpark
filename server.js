@@ -24,6 +24,8 @@ const P_SIZE = 30;
 const GRAVITY = 0.7, MOVE_SPEED = 4.2, JUMP_V = -13.5, MAX_FALL = 16;
 const COYOTE = 7;        // 발판에서 떨어진 뒤에도 잠깐 점프 허용
 const JUMP_BUFFER = 7;   // 착지 직전에 미리 누른 점프 기억
+const BUBBLE_MAX = 5;    // 한 스테이지에서 쏠 수 있는 버블 수
+const TAP_ESCAPE = 1;    // 버블 탈출에 필요한 스페이스 횟수
 const COLORS = ['#ff5c5c', '#4ea3ff', '#4ee08a', '#ffd23f', '#c76bff', '#ff9e3f', '#3fe0d0', '#ff6bc0'];
 const CHAR_IDS = ['kirby', 'dog', 'cat', 'bubble', 'bear', 'otter', 'pigeon', 'rabbit'];
 
@@ -44,7 +46,8 @@ function createRoom(code) {
     code, players: new Map(), levelIndex: 0, keys: [], doorOpen: false,
     winTimer: 0, message: '', nextColor: 0, tick: 0,
     fallers: [], fallerId: 1, rainTimer: 0, plateActive: [], boss: null,
-    bubbles: [], bubbleId: 1,
+    bubbles: [], bubbleId: 1, dropKeys: [], dropKeyId: 1,
+    gateOpen: [], finished: false,
     loop: null, _lastBc: undefined,
   };
   loadLevel(room, Number(process.env.START_LEVEL) || 0);  // START_LEVEL: 테스트/디버그용 시작 스테이지
@@ -62,13 +65,15 @@ function loadLevel(room, index) {
   room.tick = 0;
   room.fallers = [];
   room.bubbles = [];
+  room.dropKeys = [];
   room.rainTimer = 0;
+  room.gateOpen = (lvl.gates || []).map(() => false);
   room.plateActive = (lvl.boss?.plates || []).map(() => false);
   room.boss = lvl.boss
     ? { hp: lvl.boss.hp, maxHp: lvl.boss.hp, x: (lvl.boss.minX + lvl.boss.maxX) / 2,
         dir: 1, charge: 0, hitCd: 0, flash: 0 }
     : null;
-  for (const p of room.players.values()) respawn(p, lvl);
+  for (const p of room.players.values()) { respawn(p, lvl); p.bubbleAmmo = BUBBLE_MAX; }
 }
 
 function respawn(p, lvl) {
@@ -78,7 +83,11 @@ function respawn(p, lvl) {
   p.coyote = 0; p.jumpBuf = 0;
   p.trapped = false; p.trapTaps = 0; p.carrier = -1;
 }
-function kill(p, lvl) { respawn(p, lvl); p.blink = 42; p.deaths = (p.deaths || 0) + 1; }
+// 죽으면 죽은 자리에 열쇠(유령 열쇠)를 떨어뜨리고 부활
+function kill(p, lvl, room) {
+  if (room) room.dropKeys.push({ id: room.dropKeyId++, x: p.x + 2, y: Math.min(p.y + 2, WORLD_H - 70) });
+  respawn(p, lvl); p.blink = 42; p.deaths = (p.deaths || 0) + 1;
+}
 
 // ---------------- 유틸 ----------------
 function overlap(ax, ay, aw, ah, bx, by, bw, bh) {
@@ -126,8 +135,16 @@ function stepRoom(room) {
   const curM = movers.map(m => moverRect(m, room.tick));
   const prevM = movers.map(m => moverRect(m, room.tick - 1));
   const deltaM = curM.map((c, i) => ({ dx: c.x - prevM[i].x, dy: c.y - prevM[i].y }));
-  const solids = lvl.platforms.concat(curM);
+
+  // 협동 문(게이트): 연결된 스위치 중 하나라도 밟고 있으면 열림(통과 가능)
+  const gates = lvl.gates || [];
+  const onSwitch = (sw) => sw && players.some(p => !p.trapped && overlap(p.x, p.y, P_SIZE, P_SIZE, sw.x, sw.y, sw.w, sw.h));
+  room.gateOpen = gates.map(g => onSwitch(g.sw) || onSwitch(g.sw2));
+  const closedGates = gates.filter((g, i) => !room.gateOpen[i]).map(g => ({ x: g.x, y: g.y, w: g.w, h: g.h }));
+
+  const solids = lvl.platforms.concat(curM, closedGates);
   const moverStart = lvl.platforms.length;
+  const moverEnd = moverStart + curM.length;   // 이 범위만 '탈 수 있는' 발판
 
   // 발판에 탄 플레이어를 함께 이동
   for (const p of players) {
@@ -137,7 +154,7 @@ function stepRoom(room) {
     }
   }
 
-  // 버블에 갇힌 플레이어: 물리 무시, 위로 둥실 → 스페이스 10번 눌러 탈출
+  // 버블에 갇힌 플레이어: 물리 무시, 위로 둥실 → 스페이스로 탈출
   for (const p of players) {
     if (!p.trapped) continue;
     p.vx = 0; p.vy = 0; p.rideMover = -1; p.carrier = -1;
@@ -146,7 +163,7 @@ function stepRoom(room) {
     if (p.x < 0) p.x = 0; if (p.x + P_SIZE > WORLD_W) p.x = WORLD_W - P_SIZE;
     if (p.upEdge) {
       p.trapTaps++;
-      if (p.trapTaps >= 10) { p.trapped = false; p.trapTaps = 0; p.vy = -4; }
+      if (p.trapTaps >= TAP_ESCAPE) { p.trapped = false; p.trapTaps = 0; p.vy = -4; }
     }
   }
 
@@ -179,7 +196,7 @@ function stepRoom(room) {
       if (overlap(p.x, p.y, P_SIZE, P_SIZE, s.x, s.y, s.w, s.h)) {
         if (p.vy > 0) {
           p.y = s.y - P_SIZE; p.vy = 0; p.onGround = true;
-          if (i >= moverStart) p.rideMover = i - moverStart;
+          if (i >= moverStart && i < moverEnd) p.rideMover = i - moverStart;
         } else if (p.vy < 0) { p.y = s.y + s.h; p.vy = 0; }
       }
     }
@@ -224,18 +241,23 @@ function stepRoom(room) {
     p.onGround = true; p.coyote = COYOTE;      // 위 사람도 언제든 점프해서 내릴 수 있게
   }
 
-  // 버블 발사
+  // 버블 발사 (스테이지당 최대 BUBBLE_MAX발)
   for (const p of players) {
     if (p.trapped) continue;
     if (p.shootCd > 0) p.shootCd--;
-    if (p.shootEdge && p.shootCd <= 0) { spawnBubble(room, p); p.shootCd = 25; }
+    if (p.shootEdge && p.shootCd <= 0 && p.bubbleAmmo > 0) {
+      spawnBubble(room, p); p.shootCd = 15; p.bubbleAmmo--;
+    }
   }
   // 버블 이동 + 충돌(상대를 가둠)
   for (const b of room.bubbles) { b.x += b.vx; b.life--; }
   for (const b of room.bubbles) {
     if (b.hit) continue;
+    const owner = byId.get(b.owner);
     for (const q of players) {
       if (q.id === b.owner || q.trapped) continue;
+      // 같은 목마(스택)에 있는 사람은 쏜 사람 버블에 안 맞음
+      if (q.carrier === b.owner || (owner && owner.carrier === q.id)) continue;
       if (overlap(b.x - 16, b.y - 16, 32, 32, q.x, q.y, P_SIZE, P_SIZE)) {
         q.trapped = true; q.trapTaps = 0; q.vx = 0; q.vy = 0; q.carrier = -1; b.hit = true; break;
       }
@@ -243,14 +265,20 @@ function stepRoom(room) {
   }
   room.bubbles = room.bubbles.filter(b => !b.hit && b.life > 0 && b.x > -30 && b.x < WORLD_W + 30);
 
+  // 떨어진 열쇠 줍기(누구나) — 죽은 자리에 남은 열쇠
+  for (const p of players) {
+    if (p.trapped) continue;
+    room.dropKeys = room.dropKeys.filter(dk => !overlap(p.x, p.y, P_SIZE, P_SIZE, dk.x, dk.y, 26, 26));
+  }
+
   // 낙사
   for (const p of players) if (!p.trapped && p.y > WORLD_H + 80) respawn(p, lvl);
 
-  // 가시 (밟으면 죽고 그 사람만 시작지점 부활)
+  // 가시 (밟으면 죽고 그 사람만 부활, 죽은 자리에 열쇠 남김)
   for (const p of players) {
     if (p.trapped || p.blink > 0) continue;
     for (const sp of (lvl.spikes || [])) {
-      if (overlap(p.x + 4, p.y + 4, P_SIZE - 8, P_SIZE - 8, sp.x, sp.y, sp.w, sp.h)) { kill(p, lvl); break; }
+      if (overlap(p.x + 4, p.y + 4, P_SIZE - 8, P_SIZE - 8, sp.x, sp.y, sp.w, sp.h)) { kill(p, lvl, room); break; }
     }
   }
 
@@ -266,21 +294,25 @@ function stepRoom(room) {
 }
 
 function updateRain(room, lvl, players) {
-  // 일반 레벨의 상시 낙하(rain) — 보스는 stepBoss에서 별도로 생성
+  // 일반 레벨의 상시 낙하(rain) — 후반 스테이지일수록 더 자주, 더 빠르게, 더 많이
   if (lvl.rain && !room.boss) {
+    const d = room.levelIndex;
+    const interval = Math.max(10, lvl.rain.interval - d * 2);
+    const speed = lvl.rain.speed + d * 0.2;
     room.rainTimer++;
-    if (room.rainTimer >= lvl.rain.interval) {
+    if (room.rainTimer >= interval) {
       room.rainTimer = 0;
-      spawnFaller(room, lvl.rain.speed, lvl.rain.size);
+      spawnFaller(room, speed, lvl.rain.size);
+      if (Math.random() < d * 0.03) spawnFaller(room, speed, lvl.rain.size);  // 후반엔 다발
     }
   }
   for (const f of room.fallers) f.y += f.vy;
-  // 충돌 → 죽음
+  // 충돌 → 죽음(자리에 열쇠 남김)
   for (const p of players) {
     if (p.trapped || p.blink > 0) continue;
     for (const f of room.fallers) {
       if (overlap(p.x + 3, p.y + 3, P_SIZE - 6, P_SIZE - 6, f.x, f.y, f.w, f.h)) {
-        kill(p, lvl); f.y = WORLD_H + 999; break;
+        kill(p, lvl, room); f.y = WORLD_H + 999; break;
       }
     }
   }
@@ -339,9 +371,9 @@ function stepBoss(room, lvl, players) {
     }
     room.message = `보스 HP ${rb.hp} · 양쪽 발판을 동시에 밟아 공격!`;
   } else {
-    room.winTimer += TICK;
-    room.message = '보스 격파!! 🎉 최고의 팀워크!';
-    if (room.winTimer > 2000) loadLevel(room, room.levelIndex + 1);
+    // 리얼 보스 격파 → 전체 클리어! (더 이상 진행 없음)
+    if (!room.finished) { room.finished = true; room.fallers = []; }
+    room.message = '보스 격파!! 🎉 전체 클리어!';
   }
 }
 
@@ -352,10 +384,16 @@ function serializeState(room) {
   return {
     t: 'state',
     level: room.levelIndex, levelName: lvl.name, totalLevels: LEVELS.length,
+    finished: room.finished,
     platforms: lvl.platforms, movers,
     spikes: lvl.spikes || [],
+    gates: (lvl.gates || []).map((g, i) => ({
+      x: g.x, y: g.y, w: g.w, h: g.h, open: !!room.gateOpen[i],
+      sw: g.sw, sw2: g.sw2 || null,
+    })),
     door: lvl.door || null, doorOpen: room.doorOpen,
     keys: room.keys, message: room.message,
+    dropKeys: room.dropKeys,
     fallers: room.fallers.map(f => ({ id: f.id, x: Math.round(f.x), y: Math.round(f.y), w: f.w, h: f.h })),
     bubbles: room.bubbles.map(b => ({ id: b.id, x: Math.round(b.x), y: Math.round(b.y) })),
     boss: room.boss ? {
@@ -369,6 +407,7 @@ function serializeState(room) {
       x: Math.round(p.x), y: Math.round(p.y), facing: p.facing,
       blink: p.blink > 0 ? 1 : 0, deaths: p.deaths || 0,
       trapped: p.trapped ? 1 : 0, taps: p.trapTaps || 0,
+      ammo: p.bubbleAmmo,
     })),
   };
 }
@@ -423,6 +462,7 @@ wss.on('connection', (ws) => {
         facing: 1, x: 0, y: 0, vx: 0, vy: 0, _px: 0, onGround: false,
         rideMover: -1, coyote: 0, jumpBuf: 0, blink: 0, deaths: 0,
         shootCd: 0, trapped: false, trapTaps: 0, carrier: -1,
+        bubbleAmmo: BUBBLE_MAX,
       };
       respawn(player, lvl);
       room.players.set(player.id, player);
@@ -434,6 +474,10 @@ wss.on('connection', (ws) => {
       player.input.right = !!msg.right;
       player.input.up = !!msg.up;
       player.input.shoot = !!msg.shoot;
+    }
+    else if (msg.t === 'restart' && room) {
+      room.finished = false;
+      loadLevel(room, 0);
     }
   });
 

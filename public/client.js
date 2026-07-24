@@ -159,6 +159,11 @@ $('shareBtn').onclick = async () => {
     prompt('이 링크를 복사해서 친구에게 보내세요:', url);
   }
 };
+// 승리 화면 → 처음부터 다시 (모두 함께 리셋)
+$('restartBtn').onclick = () => {
+  if (ws && ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify({ t: 'restart' }));
+};
+
 function showToast(text) {
   const t = $('copyToast');
   t.textContent = text;
@@ -209,11 +214,17 @@ function render() {
   // 움직이는 발판 (보간)
   if (s.movers) s.movers.forEach((m, i) => drawMover(lerpRect(prevState?.movers?.[i], m, alpha)));
 
+  // 협동 게이트 + 스위치
+  if (s.gates) for (const g of s.gates) drawGate(g);
+
   // 보스 스위치(발판)
   if (s.plates) for (const pl of s.plates) drawPlate(pl);
 
   // 가시
   if (s.spikes) for (const sp of s.spikes) drawSpikes(sp);
+
+  // 떨어진 열쇠(죽은 자리)
+  if (s.dropKeys) for (const dk of s.dropKeys) drawDropKey(dk);
 
   // 문 (보스전은 문이 없음)
   if (s.door) drawDoor(s.door, s.doorOpen);
@@ -244,10 +255,46 @@ function render() {
     if (p.trapped) drawTrapBubble(pos.x, pos.y, p.taps, p.id === myId);
   }
 
+  // 내 버블 잔량 표시
+  const me = s.players.find(p => p.id === myId);
+  if (me && me.ammo != null) drawAmmo(me.ammo);
+
   // 배너 (클리어 / 보스 격파)
-  if (s.message && (s.doorOpen || s.message.includes('클리어') || s.message.includes('격파'))) {
+  if (!s.finished && s.message && (s.doorOpen || s.message.includes('클리어') || s.message.includes('격파'))) {
     drawBanner(s.message);
   }
+
+  // 전체 클리어 → 승리 화면
+  if (s.finished) showWin(s); else hideWin();
+}
+
+function drawAmmo(n) {
+  ctx.save();
+  ctx.textAlign = 'left';
+  ctx.font = '600 13px Segoe UI, sans-serif';
+  ctx.fillStyle = 'rgba(0,0,0,0.35)';
+  roundRect(12, 12, 116, 24, 8); ctx.fill();
+  for (let i = 0; i < 5; i++) {
+    ctx.beginPath(); ctx.arc(28 + i * 20, 24, 7, 0, Math.PI * 2);
+    ctx.fillStyle = i < n ? 'rgba(150,210,255,0.9)' : 'rgba(255,255,255,0.15)';
+    ctx.fill();
+    if (i < n) { ctx.fillStyle = 'rgba(255,255,255,0.7)'; ctx.beginPath(); ctx.arc(26 + i * 20, 22, 2, 0, Math.PI * 2); ctx.fill(); }
+  }
+  ctx.restore();
+}
+
+let winShown = false;
+function showWin(s) {
+  if (winShown) return;
+  winShown = true;
+  const totalDeaths = s.players.reduce((a, p) => a + (p.deaths || 0), 0);
+  $('winStats').textContent = `총 ${s.totalLevels}개 스테이지 완주 · 팀 전체 사망 ${totalDeaths}회`;
+  $('winScreen').classList.remove('hidden');
+}
+function hideWin() {
+  if (!winShown) return;
+  winShown = false;
+  $('winScreen').classList.add('hidden');
 }
 
 function lerpRect(prev, cur, alpha) {
@@ -565,6 +612,52 @@ function drawMover(m) {
   ctx.restore();
 }
 
+// 협동 게이트 (닫히면 벽, 열리면 반투명) + 연결된 스위치
+function drawGate(g) {
+  ctx.save();
+  for (const sw of [g.sw, g.sw2]) {
+    if (!sw) continue;
+    const on = g.open;
+    ctx.fillStyle = on ? '#2f6b3a' : '#5a3a2a';
+    roundRect(sw.x, sw.y - 4, sw.w, sw.h + 4, 4); ctx.fill();
+    ctx.fillStyle = on ? '#4ee08a' : '#e0a24a';
+    ctx.fillRect(sw.x, sw.y - 4, sw.w, 4);
+    ctx.fillStyle = on ? '#dfffe9' : '#f0d8b0';
+    ctx.font = '700 11px Segoe UI, sans-serif'; ctx.textAlign = 'center';
+    ctx.fillText(on ? 'OPEN' : '밟기', sw.x + sw.w / 2, sw.y - 8);
+  }
+  if (g.open) {
+    ctx.globalAlpha = 0.22;
+    ctx.fillStyle = '#4ee08a';
+    roundRect(g.x, g.y, g.w, g.h, 4); ctx.fill();
+    ctx.globalAlpha = 1;
+    ctx.setLineDash([5, 5]); ctx.strokeStyle = 'rgba(78,224,138,0.5)'; ctx.lineWidth = 2;
+    roundRect(g.x, g.y, g.w, g.h, 4); ctx.stroke(); ctx.setLineDash([]);
+  } else {
+    ctx.fillStyle = '#6b4a2a';
+    roundRect(g.x, g.y, g.w, g.h, 4); ctx.fill();
+    ctx.fillStyle = '#8a6438';
+    for (let yy = g.y + 6; yy < g.y + g.h - 4; yy += 16) ctx.fillRect(g.x + 3, yy, g.w - 6, 8);
+    ctx.strokeStyle = '#3a2814'; ctx.lineWidth = 2; roundRect(g.x, g.y, g.w, g.h, 4); ctx.stroke();
+  }
+  ctx.restore();
+}
+
+// 떨어진 열쇠(죽은 자리) — 은은하게 반짝이는 유령 열쇠
+function drawDropKey(dk) {
+  ctx.save();
+  const bob = Math.sin(performance.now() / 260 + dk.x) * 3;
+  ctx.globalAlpha = 0.65 + 0.2 * Math.sin(performance.now() / 200 + dk.id);
+  ctx.translate(dk.x + 13, dk.y + 13 + bob);
+  ctx.fillStyle = '#afe9ff';
+  ctx.beginPath(); ctx.arc(-4, 0, 8, 0, Math.PI * 2); ctx.fill();
+  ctx.fillStyle = '#0e1018';
+  ctx.beginPath(); ctx.arc(-4, 0, 3, 0, Math.PI * 2); ctx.fill();
+  ctx.fillStyle = '#afe9ff';
+  ctx.fillRect(2, -2, 12, 4); ctx.fillRect(10, -2, 3, 7);
+  ctx.restore();
+}
+
 // 보스 스위치 (밟으면 초록으로 켜짐)
 function drawPlate(pl) {
   ctx.save();
@@ -655,18 +748,11 @@ function drawTrapBubble(x, y, taps, isMe) {
   ctx.fillStyle = 'rgba(255,255,255,0.8)';
   ctx.beginPath(); ctx.arc(cx - 9, cy - 9, 4, 0, Math.PI * 2); ctx.fill();
 
-  // 탈출 게이지 (10번 눌러야 터짐)
-  const left = Math.max(0, 10 - taps);
+  // 탈출 안내 (스페이스 한 번이면 터짐)
   ctx.fillStyle = '#ffd23f';
   ctx.font = '700 13px Segoe UI, sans-serif';
   ctx.textAlign = 'center';
-  ctx.fillText(isMe ? `스페이스 ${left}번!` : `${left}`, cx, y - 28);
-  // 게이지 바
-  const bw = 40, bx = cx - bw / 2, by = y - 24;
-  ctx.fillStyle = 'rgba(0,0,0,0.4)';
-  roundRect(bx, by, bw, 5, 3); ctx.fill();
-  ctx.fillStyle = '#4ee08a';
-  roundRect(bx, by, bw * (taps / 10), 5, 3); ctx.fill();
+  ctx.fillText(isMe ? '스페이스로 탈출!' : '🫧', cx, y - 26);
   ctx.restore();
 }
 

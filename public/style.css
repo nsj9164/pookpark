@@ -119,3 +119,27 @@ canvas {
 .charBtn canvas { display: block; }
 .charBtn:hover { background: #222842; color: var(--text); }
 .charBtn.sel { border-color: var(--accent2); background: #16301f; color: #eafff2; }
+
+/* 전체 클리어 승리 화면 */
+#winScreen {
+  position: fixed; inset: 0; z-index: 50;
+  display: flex; align-items: center; justify-content: center;
+  background: radial-gradient(800px 500px at 50% 30%, rgba(78,224,138,0.18), rgba(10,12,20,0.92));
+  backdrop-filter: blur(4px);
+}
+#winScreen.hidden { display: none; }
+.winCard {
+  text-align: center; padding: 40px 48px; border-radius: 22px;
+  background: linear-gradient(180deg, #1a2030, #12141c);
+  border: 1px solid #2c3244; box-shadow: 0 20px 60px rgba(0,0,0,0.5);
+  animation: winpop .5s cubic-bezier(.2,1.4,.4,1);
+}
+.winEmoji { font-size: 52px; margin-bottom: 10px; }
+.winCard h1 {
+  font-size: 34px; margin-bottom: 8px;
+  background: linear-gradient(90deg, #4ee08a, #4ea3ff, #ffd23f);
+  -webkit-background-clip: text; background-clip: text; -webkit-text-fill-color: transparent;
+}
+.winStats { color: var(--muted); margin: 6px 0 22px; font-size: 14px; }
+.winCard .primary { min-width: 200px; }
+@keyframes winpop { from { transform: scale(.8); opacity: 0; } to { transform: scale(1); opacity: 1; } }
