@@ -440,145 +440,209 @@ function smile(c, cx, cy, dir) {
   c.strokeStyle = 'rgba(120,40,60,0.7)'; c.lineWidth = 1.3;
   c.beginPath(); c.arc(cx + dir * 1.5, cy + 5, 2.4, 0.15 * Math.PI, 0.85 * Math.PI); c.stroke();
 }
-const noop = () => {};
+function eyePair(c, lx, rx, ey, sz = 2.3) {
+  for (const ex of [lx, rx]) {
+    c.fillStyle = '#2b2b3a'; c.beginPath(); c.arc(ex, ey, sz, 0, TAU); c.fill();
+    c.fillStyle = '#fff'; c.beginPath(); c.arc(ex - sz * 0.35, ey - sz * 0.4, sz * 0.35, 0, TAU); c.fill();
+  }
+}
 
-// ---- 캐릭터별 아트 (behind: 몸통 뒤 / front: 몸통 앞 + 얼굴) ----
+// ---- 캐릭터별 아트: 각자 고유한 몸 실루엣으로 전신을 그림 (c, cx, cy=몸 중심, dir, color) ----
 const ART = {
-  kirby: {
-    behind: noop,
-    front(c, cx, cy, r, dir, color) { eyesKirby(c, cx, cy, dir); cheeks(c, cx, cy, dir); smile(c, cx, cy, dir); },
+  // 커비: 동그란 분홍 퍼프
+  kirby(c, cx, cy, dir, color) {
+    const gy = cy + 14;
+    c.fillStyle = shade(color, -55);
+    c.beginPath(); c.ellipse(cx - 8, gy, 7, 4.5, -0.25 * dir, 0, TAU); c.fill();
+    c.beginPath(); c.ellipse(cx + 8, gy, 7, 4.5, 0.25 * dir, 0, TAU); c.fill();
+    c.fillStyle = shade(color, -18);
+    c.beginPath(); c.ellipse(cx - 14, cy + 3, 5, 6, 0.4, 0, TAU); c.fill();
+    c.beginPath(); c.ellipse(cx + 14, cy + 3, 5, 6, -0.4, 0, TAU); c.fill();
+    c.fillStyle = color; c.beginPath(); c.arc(cx, cy, 15, 0, TAU); c.fill();
+    c.fillStyle = 'rgba(255,255,255,0.28)'; c.beginPath(); c.ellipse(cx - 5, cy - 6, 5.5, 4, -0.5, 0, TAU); c.fill();
+    eyesKirby(c, cx, cy, dir); cheeks(c, cx, cy, dir); smile(c, cx, cy, dir);
   },
-  dog: {
-    behind(c, cx, cy, r, dir, color) {
-      c.fillStyle = shade(color, -45);
-      c.beginPath(); c.ellipse(cx - r * 0.8, cy - r * 0.15, 5, 11, 0.3, 0, TAU); c.fill();
-      c.beginPath(); c.ellipse(cx + r * 0.8, cy - r * 0.15, 5, 11, -0.3, 0, TAU); c.fill();
-    },
-    front(c, cx, cy, r, dir, color) {
-      c.fillStyle = shade(color, 45); c.beginPath(); c.ellipse(cx + dir * 2, cy + 6, 8, 6, 0, 0, TAU); c.fill();
-      c.fillStyle = '#3a2b2b'; c.beginPath(); c.ellipse(cx + dir * 2, cy + 2, 2.6, 2, 0, 0, TAU); c.fill();
-      c.strokeStyle = '#3a2b2b'; c.lineWidth = 1; c.beginPath(); c.moveTo(cx + dir * 2, cy + 4); c.lineTo(cx + dir * 2, cy + 8); c.stroke();
-      eyesDot(c, cx, cy, dir, 5, -4, 2.4);
-    },
+
+  // 강아지: 처진 귀 + 주둥이 + 꼬리
+  dog(c, cx, cy, dir, color) {
+    const gy = cy + 14;
+    c.fillStyle = shade(color, -12);   // 꼬리
+    c.beginPath(); c.ellipse(cx - dir * 13, cy + 3, 4, 7, dir * 0.7, 0, TAU); c.fill();
+    c.fillStyle = color;               // 몸통
+    c.beginPath(); c.ellipse(cx, cy + 7, 11, 9, 0, 0, TAU); c.fill();
+    c.fillStyle = shade(color, 25);    // 앞발
+    c.beginPath(); c.ellipse(cx - 5, gy, 4.5, 3.2, 0, 0, TAU); c.fill();
+    c.beginPath(); c.ellipse(cx + 5, gy, 4.5, 3.2, 0, 0, TAU); c.fill();
+    c.fillStyle = color;               // 머리
+    c.beginPath(); c.arc(cx, cy - 4, 11, 0, TAU); c.fill();
+    c.fillStyle = shade(color, -35);   // 처진 귀
+    c.beginPath(); c.ellipse(cx - 10, cy - 3, 4.5, 9, 0.4, 0, TAU); c.fill();
+    c.beginPath(); c.ellipse(cx + 10, cy - 3, 4.5, 9, -0.4, 0, TAU); c.fill();
+    c.fillStyle = shade(color, 45);    // 주둥이
+    c.beginPath(); c.ellipse(cx, cy + 1, 7, 5.5, 0, 0, TAU); c.fill();
+    eyePair(c, cx - 5, cx + 5, cy - 6, 2.3);
+    c.fillStyle = '#2a2320';           // 코
+    c.beginPath(); c.ellipse(cx, cy - 2, 2.6, 2, 0, 0, TAU); c.fill();
+    c.strokeStyle = '#2a2320'; c.lineWidth = 1;
+    c.beginPath(); c.moveTo(cx, cy); c.lineTo(cx, cy + 3); c.stroke();
   },
-  cat: {
-    behind: noop,
-    front(c, cx, cy, r, dir, color) {
-      for (const s of [-1, 1]) {
-        c.fillStyle = color;
-        c.beginPath(); c.moveTo(cx + s * r * 0.55 - 6, cy - r * 0.5); c.lineTo(cx + s * r * 0.55, cy - r * 1.05); c.lineTo(cx + s * r * 0.55 + 6, cy - r * 0.5); c.closePath(); c.fill();
-        c.fillStyle = 'rgba(255,150,180,0.9)';
-        c.beginPath(); c.moveTo(cx + s * r * 0.55 - 2, cy - r * 0.58); c.lineTo(cx + s * r * 0.55, cy - r * 0.88); c.lineTo(cx + s * r * 0.55 + 2, cy - r * 0.58); c.closePath(); c.fill();
-      }
-      eyesKirby(c, cx, cy, dir);
-      c.fillStyle = '#ff8fa8'; c.beginPath(); c.moveTo(cx + dir * 1.5 - 2, cy + 3); c.lineTo(cx + dir * 1.5 + 2, cy + 3); c.lineTo(cx + dir * 1.5, cy + 5); c.closePath(); c.fill();
-      c.strokeStyle = 'rgba(255,255,255,0.7)'; c.lineWidth = 0.8;
-      for (const dy of [0, 3]) {
-        c.beginPath(); c.moveTo(cx - 6, cy + 3 + dy); c.lineTo(cx - 16, cy + 1 + dy); c.stroke();
-        c.beginPath(); c.moveTo(cx + 6, cy + 3 + dy); c.lineTo(cx + 16, cy + 1 + dy); c.stroke();
-      }
-    },
-  },
-  bubble: {  // 보글보글 공룡(Bub)
-    behind(c, cx, cy, r, dir, color) {
-      c.fillStyle = shade(color, -35);
-      for (let i = -1; i <= 1; i++) {
-        c.beginPath(); c.moveTo(cx + i * 7 - 4, cy - r + 4); c.lineTo(cx + i * 7, cy - r - 4); c.lineTo(cx + i * 7 + 4, cy - r + 4); c.closePath(); c.fill();
-      }
-    },
-    front(c, cx, cy, r, dir, color) {
-      c.fillStyle = shade(color, 60); c.beginPath(); c.ellipse(cx, cy + 5, r * 0.62, r * 0.55, 0, 0, TAU); c.fill();
-      for (const s of [-1, 1]) {
-        const ex = cx + s * 5 + dir;
-        c.fillStyle = '#fff'; c.beginPath(); c.ellipse(ex, cy - 6, 4.5, 5.5, 0, 0, TAU); c.fill();
-        c.fillStyle = '#2b2b3a'; c.beginPath(); c.arc(ex + dir * 0.8, cy - 5, 2.1, 0, TAU); c.fill();
-        c.fillStyle = '#fff'; c.beginPath(); c.arc(ex + dir * 0.8 - 0.7, cy - 6, 0.8, 0, TAU); c.fill();
-      }
-      c.strokeStyle = '#2a5a3a'; c.lineWidth = 1.6; c.beginPath(); c.arc(cx + dir, cy + 4, 5, 0.1 * Math.PI, 0.9 * Math.PI); c.stroke();
-    },
-  },
-  bear: {
-    behind(c, cx, cy, r, dir, color) {
+
+  // 고양이: 뾰족 귀 + 긴 꼬리 + 수염
+  cat(c, cx, cy, dir, color) {
+    const gy = cy + 14;
+    c.strokeStyle = color; c.lineWidth = 5; c.lineCap = 'round';  // 긴 꼬리
+    c.beginPath(); c.moveTo(cx - dir * 9, cy + 9); c.quadraticCurveTo(cx - dir * 19, cy + 2, cx - dir * 15, cy - 7); c.stroke();
+    c.lineCap = 'butt';
+    c.fillStyle = color;               // 몸통
+    c.beginPath(); c.ellipse(cx, cy + 7, 10, 9, 0, 0, TAU); c.fill();
+    c.fillStyle = shade(color, 20);    // 앞발
+    c.beginPath(); c.ellipse(cx - 4, gy, 3.6, 2.8, 0, 0, TAU); c.fill();
+    c.beginPath(); c.ellipse(cx + 4, gy, 3.6, 2.8, 0, 0, TAU); c.fill();
+    c.fillStyle = color;               // 머리
+    c.beginPath(); c.arc(cx, cy - 5, 10, 0, TAU); c.fill();
+    for (const s of [-1, 1]) {         // 뾰족 귀
       c.fillStyle = color;
-      c.beginPath(); c.arc(cx - r * 0.7, cy - r * 0.75, 6, 0, TAU); c.fill();
-      c.beginPath(); c.arc(cx + r * 0.7, cy - r * 0.75, 6, 0, TAU); c.fill();
-      c.fillStyle = shade(color, 40);
-      c.beginPath(); c.arc(cx - r * 0.7, cy - r * 0.72, 3, 0, TAU); c.fill();
-      c.beginPath(); c.arc(cx + r * 0.7, cy - r * 0.72, 3, 0, TAU); c.fill();
-    },
-    front(c, cx, cy, r, dir, color) {
-      c.fillStyle = shade(color, 50); c.beginPath(); c.ellipse(cx, cy + 6, 7, 5.5, 0, 0, TAU); c.fill();
-      c.fillStyle = '#3a2b2b'; c.beginPath(); c.ellipse(cx, cy + 3, 2.6, 2, 0, 0, TAU); c.fill();
-      eyesDot(c, cx, cy, dir, 5, -4, 2.3);
-    },
+      c.beginPath(); c.moveTo(cx + s * 9, cy - 10); c.lineTo(cx + s * 5, cy - 17); c.lineTo(cx + s * 1, cy - 10); c.closePath(); c.fill();
+      c.fillStyle = 'rgba(255,150,180,0.9)';
+      c.beginPath(); c.moveTo(cx + s * 7, cy - 11); c.lineTo(cx + s * 5, cy - 15); c.lineTo(cx + s * 3.5, cy - 11); c.closePath(); c.fill();
+    }
+    c.fillStyle = '#2b3a2a';           // 아몬드 눈
+    c.beginPath(); c.ellipse(cx - 4, cy - 5, 1.9, 3.1, 0, 0, TAU); c.fill();
+    c.beginPath(); c.ellipse(cx + 4, cy - 5, 1.9, 3.1, 0, 0, TAU); c.fill();
+    c.fillStyle = '#ff8fa8';           // 코
+    c.beginPath(); c.moveTo(cx - 1.6, cy - 1); c.lineTo(cx + 1.6, cy - 1); c.lineTo(cx, cy + 1); c.closePath(); c.fill();
+    c.strokeStyle = 'rgba(255,255,255,0.7)'; c.lineWidth = 0.7;  // 수염
+    for (const dyw of [0, 2.5]) {
+      c.beginPath(); c.moveTo(cx - 3, cy + dyw); c.lineTo(cx - 13, cy - 1 + dyw); c.stroke();
+      c.beginPath(); c.moveTo(cx + 3, cy + dyw); c.lineTo(cx + 13, cy - 1 + dyw); c.stroke();
+    }
   },
-  otter: {
-    behind(c, cx, cy, r, dir, color) {
-      c.fillStyle = shade(color, -20);
-      c.beginPath(); c.arc(cx - r * 0.75, cy - r * 0.6, 3.5, 0, TAU); c.fill();
-      c.beginPath(); c.arc(cx + r * 0.75, cy - r * 0.6, 3.5, 0, TAU); c.fill();
-    },
-    front(c, cx, cy, r, dir, color) {
-      c.fillStyle = shade(color, 55); c.beginPath(); c.ellipse(cx, cy + 5, 9, 7, 0, 0, TAU); c.fill();
-      eyesDot(c, cx, cy - 1, dir, 5, -4, 2.2);
-      c.fillStyle = '#4a3630'; c.beginPath(); c.ellipse(cx, cy + 2, 3, 2.2, 0, 0, TAU); c.fill();
-      c.strokeStyle = '#4a3630'; c.lineWidth = 1;
-      c.beginPath(); c.arc(cx - 2.5, cy + 6, 2.5, -0.2 * Math.PI, 0.9 * Math.PI); c.stroke();
-      c.beginPath(); c.arc(cx + 2.5, cy + 6, 2.5, 0.1 * Math.PI, 1.2 * Math.PI); c.stroke();
-      c.strokeStyle = 'rgba(255,255,255,0.6)'; c.lineWidth = 0.7;
-      for (const s of [-1, 1]) for (const dy of [0, 2]) { c.beginPath(); c.moveTo(cx + s * 3, cy + 3 + dy); c.lineTo(cx + s * 13, cy + 2 + dy); c.stroke(); }
-    },
+
+  // 보글보글 공룡(Bub): 통통한 몸 + 등가시 + 큰 눈 + 배
+  bubble(c, cx, cy, dir, color) {
+    const gy = cy + 14;
+    c.fillStyle = shade(color, -20);   // 꼬리
+    c.beginPath(); c.moveTo(cx - dir * 10, cy + 8); c.lineTo(cx - dir * 19, cy + 4); c.lineTo(cx - dir * 10, cy + 13); c.closePath(); c.fill();
+    c.fillStyle = shade(color, -30);   // 등가시
+    for (let i = -1; i <= 1; i++) { c.beginPath(); c.moveTo(cx + i * 6 - 3, cy - 9); c.lineTo(cx + i * 6, cy - 15); c.lineTo(cx + i * 6 + 3, cy - 9); c.closePath(); c.fill(); }
+    c.fillStyle = color;               // 몸통
+    c.beginPath(); c.ellipse(cx, cy + 2, 13, 14, 0, 0, TAU); c.fill();
+    c.fillStyle = shade(color, 60);    // 배
+    c.beginPath(); c.ellipse(cx, cy + 6, 8, 8, 0, 0, TAU); c.fill();
+    c.fillStyle = shade(color, -15);   // 발
+    c.beginPath(); c.ellipse(cx - 6, gy, 5, 3, 0, 0, TAU); c.fill();
+    c.beginPath(); c.ellipse(cx + 6, gy, 5, 3, 0, 0, TAU); c.fill();
+    for (const s of [-1, 1]) {         // 큰 눈
+      const ex = cx + s * 5 + dir * 0.5;
+      c.fillStyle = '#fff'; c.beginPath(); c.ellipse(ex, cy - 7, 4.5, 5.5, 0, 0, TAU); c.fill();
+      c.fillStyle = '#2b2b3a'; c.beginPath(); c.arc(ex + dir * 0.6, cy - 6, 2, 0, TAU); c.fill();
+      c.fillStyle = '#fff'; c.beginPath(); c.arc(ex + dir * 0.6 - 0.7, cy - 7, 0.8, 0, TAU); c.fill();
+    }
+    c.strokeStyle = '#2a5a3a'; c.lineWidth = 1.6; c.beginPath(); c.arc(cx + dir, cy + 1, 5, 0.1 * Math.PI, 0.9 * Math.PI); c.stroke();
   },
-  pigeon: {
-    behind(c, cx, cy, r, dir, color) {
-      c.fillStyle = shade(color, -25);
-      c.beginPath(); c.ellipse(cx - dir * r * 0.55, cy + 2, 6, 9, 0.3 * dir, 0, TAU); c.fill();
-      c.beginPath(); c.moveTo(cx - dir * r, cy + r * 0.3); c.lineTo(cx - dir * (r + 8), cy + r * 0.6); c.lineTo(cx - dir * r, cy + r * 0.7); c.closePath(); c.fill();
-    },
-    front(c, cx, cy, r, dir, color) {
-      c.fillStyle = 'rgba(120,220,180,0.25)'; c.beginPath(); c.ellipse(cx, cy + 6, r * 0.5, 4, 0, 0, TAU); c.fill();
-      c.fillStyle = '#f5a623';
-      c.beginPath(); c.moveTo(cx + dir * (r - 3), cy); c.lineTo(cx + dir * (r + 7), cy + 2); c.lineTo(cx + dir * (r - 3), cy + 5); c.closePath(); c.fill();
-      eyesDot(c, cx, cy, dir, 4, -4, 2.2);
-    },
+
+  // 곰돌이: 둥근 귀 + 주둥이
+  bear(c, cx, cy, dir, color) {
+    const gy = cy + 14;
+    c.fillStyle = color;               // 몸통
+    c.beginPath(); c.ellipse(cx, cy + 7, 12, 10, 0, 0, TAU); c.fill();
+    c.fillStyle = shade(color, -15);   // 다리
+    c.beginPath(); c.ellipse(cx - 6, gy, 5, 3.5, 0, 0, TAU); c.fill();
+    c.beginPath(); c.ellipse(cx + 6, gy, 5, 3.5, 0, 0, TAU); c.fill();
+    c.fillStyle = color;               // 머리
+    c.beginPath(); c.arc(cx, cy - 5, 11, 0, TAU); c.fill();
+    c.beginPath(); c.arc(cx - 9, cy - 13, 4.5, 0, TAU); c.fill();  // 둥근 귀
+    c.beginPath(); c.arc(cx + 9, cy - 13, 4.5, 0, TAU); c.fill();
+    c.fillStyle = shade(color, 40);
+    c.beginPath(); c.arc(cx - 9, cy - 13, 2.2, 0, TAU); c.fill();
+    c.beginPath(); c.arc(cx + 9, cy - 13, 2.2, 0, TAU); c.fill();
+    c.fillStyle = shade(color, 55);    // 주둥이
+    c.beginPath(); c.ellipse(cx, cy - 1, 6.5, 5, 0, 0, TAU); c.fill();
+    eyePair(c, cx - 5, cx + 5, cy - 6, 2.2);
+    c.fillStyle = '#2a2320'; c.beginPath(); c.ellipse(cx, cy - 3, 2.4, 1.8, 0, 0, TAU); c.fill();
   },
-  rabbit: {
-    behind(c, cx, cy, r, dir, color) {
-      c.fillStyle = color;
-      c.beginPath(); c.ellipse(cx - r * 0.4, cy - r * 1.1, 4, 13, 0.15, 0, TAU); c.fill();
-      c.beginPath(); c.ellipse(cx + r * 0.4, cy - r * 1.1, 4, 13, -0.15, 0, TAU); c.fill();
-      c.fillStyle = 'rgba(255,150,180,0.85)';
-      c.beginPath(); c.ellipse(cx - r * 0.4, cy - r * 1.1, 1.8, 9, 0.15, 0, TAU); c.fill();
-      c.beginPath(); c.ellipse(cx + r * 0.4, cy - r * 1.1, 1.8, 9, -0.15, 0, TAU); c.fill();
-    },
-    front(c, cx, cy, r, dir, color) {
-      eyesKirby(c, cx, cy, dir); cheeks(c, cx, cy, dir);
-      c.fillStyle = '#ff8fa8'; c.beginPath(); c.moveTo(cx + dir * 1.5 - 1.6, cy + 2); c.lineTo(cx + dir * 1.5 + 1.6, cy + 2); c.lineTo(cx + dir * 1.5, cy + 4); c.closePath(); c.fill();
-      c.fillStyle = '#fff'; c.fillRect(cx + dir * 1.5 - 2, cy + 5, 4, 3);
-      c.strokeStyle = 'rgba(0,0,0,0.2)'; c.lineWidth = 0.5; c.beginPath(); c.moveTo(cx + dir * 1.5, cy + 5); c.lineTo(cx + dir * 1.5, cy + 8); c.stroke();
-    },
+
+  // 수달: 긴 몸 + 밝은 배 + 수염 + 두꺼운 꼬리
+  otter(c, cx, cy, dir, color) {
+    const gy = cy + 14;
+    c.fillStyle = shade(color, -20);   // 두꺼운 꼬리
+    c.beginPath(); c.ellipse(cx - dir * 13, cy + 9, 8, 4, dir * 0.3, 0, TAU); c.fill();
+    c.fillStyle = color;               // 몸통
+    c.beginPath(); c.ellipse(cx, cy + 6, 11, 11, 0, 0, TAU); c.fill();
+    c.fillStyle = shade(color, 45);    // 밝은 배
+    c.beginPath(); c.ellipse(cx, cy + 8, 6, 7, 0, 0, TAU); c.fill();
+    c.fillStyle = shade(color, -10);   // 앞발 + 발
+    c.beginPath(); c.ellipse(cx - 3, cy + 9, 2.5, 2, 0, 0, TAU); c.fill();
+    c.beginPath(); c.ellipse(cx + 3, cy + 9, 2.5, 2, 0, 0, TAU); c.fill();
+    c.beginPath(); c.ellipse(cx - 6, gy, 4, 2.5, 0, 0, TAU); c.fill();
+    c.beginPath(); c.ellipse(cx + 6, gy, 4, 2.5, 0, 0, TAU); c.fill();
+    c.fillStyle = color;               // 머리
+    c.beginPath(); c.arc(cx, cy - 5, 10, 0, TAU); c.fill();
+    c.fillStyle = shade(color, -25);   // 작은 귀
+    c.beginPath(); c.arc(cx - 8, cy - 11, 2.6, 0, TAU); c.fill();
+    c.beginPath(); c.arc(cx + 8, cy - 11, 2.6, 0, TAU); c.fill();
+    c.fillStyle = shade(color, 55);    // 밝은 주둥이
+    c.beginPath(); c.ellipse(cx, cy - 2, 7, 5.5, 0, 0, TAU); c.fill();
+    eyePair(c, cx - 4, cx + 4, cy - 6, 2);
+    c.fillStyle = '#4a3630'; c.beginPath(); c.ellipse(cx, cy - 4, 2.4, 1.8, 0, 0, TAU); c.fill();
+    c.strokeStyle = 'rgba(255,255,255,0.6)'; c.lineWidth = 0.7;
+    for (const s of [-1, 1]) for (const dyw of [0, 2]) { c.beginPath(); c.moveTo(cx + s * 3, cy - 2 + dyw); c.lineTo(cx + s * 12, cy - 3 + dyw); c.stroke(); }
+  },
+
+  // 비둘기: 통통한 새 + 부리 + 날개 + 다리 + 꽁지
+  pigeon(c, cx, cy, dir, color) {
+    const gy = cy + 14;
+    c.fillStyle = shade(color, -25);   // 꽁지깃
+    c.beginPath(); c.moveTo(cx - dir * 8, cy + 4); c.lineTo(cx - dir * 18, cy + 8); c.lineTo(cx - dir * 8, cy + 11); c.closePath(); c.fill();
+    c.strokeStyle = '#f5a623'; c.lineWidth = 1.6;  // 다리
+    c.beginPath(); c.moveTo(cx - 3, cy + 14); c.lineTo(cx - 3, gy + 3); c.stroke();
+    c.beginPath(); c.moveTo(cx + 3, cy + 14); c.lineTo(cx + 3, gy + 3); c.stroke();
+    c.fillStyle = color;               // 몸통(세로로 통통)
+    c.beginPath(); c.ellipse(cx + dir * 1, cy + 5, 10, 12, 0, 0, TAU); c.fill();
+    c.fillStyle = shade(color, -18);   // 날개
+    c.beginPath(); c.ellipse(cx - dir * 3, cy + 5, 5, 9, dir * 0.15, 0, TAU); c.fill();
+    c.fillStyle = color;               // 머리
+    c.beginPath(); c.arc(cx + dir * 2, cy - 7, 7.5, 0, TAU); c.fill();
+    c.fillStyle = 'rgba(120,220,180,0.35)';  // 목 광택
+    c.beginPath(); c.ellipse(cx + dir * 1, cy - 1, 6, 4, 0, 0, TAU); c.fill();
+    c.fillStyle = '#f5a623';           // 부리
+    c.beginPath(); c.moveTo(cx + dir * 8, cy - 8); c.lineTo(cx + dir * 15, cy - 6); c.lineTo(cx + dir * 8, cy - 4); c.closePath(); c.fill();
+    c.fillStyle = '#2b2b3a'; c.beginPath(); c.arc(cx + dir * 3, cy - 8, 1.8, 0, TAU); c.fill();
+    c.fillStyle = '#fff'; c.beginPath(); c.arc(cx + dir * 2.5, cy - 8.6, 0.7, 0, TAU); c.fill();
+  },
+
+  // 토끼: 긴 귀 + 앞니 + 뭉툭 꼬리
+  rabbit(c, cx, cy, dir, color) {
+    const gy = cy + 14;
+    c.fillStyle = shade(color, 60);    // 뭉툭 꼬리
+    c.beginPath(); c.arc(cx - dir * 11, cy + 8, 4, 0, TAU); c.fill();
+    c.fillStyle = color;               // 몸통
+    c.beginPath(); c.ellipse(cx, cy + 7, 11, 10, 0, 0, TAU); c.fill();
+    c.fillStyle = shade(color, 20);    // 앞발
+    c.beginPath(); c.ellipse(cx - 4, gy, 4, 3, 0, 0, TAU); c.fill();
+    c.beginPath(); c.ellipse(cx + 4, gy, 4, 3, 0, 0, TAU); c.fill();
+    c.fillStyle = color;               // 긴 귀
+    c.beginPath(); c.ellipse(cx - 4, cy - 16, 3.5, 10, 0.12, 0, TAU); c.fill();
+    c.beginPath(); c.ellipse(cx + 4, cy - 16, 3.5, 10, -0.12, 0, TAU); c.fill();
+    c.fillStyle = 'rgba(255,150,180,0.85)';
+    c.beginPath(); c.ellipse(cx - 4, cy - 16, 1.5, 7, 0.12, 0, TAU); c.fill();
+    c.beginPath(); c.ellipse(cx + 4, cy - 16, 1.5, 7, -0.12, 0, TAU); c.fill();
+    c.fillStyle = color;               // 머리
+    c.beginPath(); c.arc(cx, cy - 4, 10, 0, TAU); c.fill();
+    eyePair(c, cx - 4, cx + 4, cy - 5, 2.2);
+    c.fillStyle = 'rgba(255,120,150,0.45)';
+    c.beginPath(); c.arc(cx - 7, cy - 2, 2, 0, TAU); c.fill();
+    c.beginPath(); c.arc(cx + 7, cy - 2, 2, 0, TAU); c.fill();
+    c.fillStyle = '#ff8fa8';           // 코
+    c.beginPath(); c.moveTo(cx - 1.5, cy - 1); c.lineTo(cx + 1.5, cy - 1); c.lineTo(cx, cy + 1); c.closePath(); c.fill();
+    c.fillStyle = '#fff'; c.fillRect(cx - 2, cy + 1, 4, 3);  // 앞니
+    c.strokeStyle = 'rgba(0,0,0,0.2)'; c.lineWidth = 0.5; c.beginPath(); c.moveTo(cx, cy + 1); c.lineTo(cx, cy + 4); c.stroke();
   },
 };
 
-// 캐릭터 하나를 그린다 (게임/미리보기 공용). c=2D 컨텍스트
+// 캐릭터 하나를 그린다 (게임/미리보기 공용). c=2D 컨텍스트, (cx,cy)=몸 중심
 function drawCreature(c, cx, cy, r, dir, color, char) {
-  const art = ART[char] || ART.kirby;
-  const foot = shade(color, -55);
-  // 발
-  c.fillStyle = foot;
-  c.beginPath(); c.ellipse(cx - 8, cy + r - 2, 7, 4.5, -0.25 * dir, 0, TAU); c.fill();
-  c.beginPath(); c.ellipse(cx + 8, cy + r - 2, 7, 4.5, 0.25 * dir, 0, TAU); c.fill();
-  // 팔
-  c.fillStyle = shade(color, -18);
-  c.beginPath(); c.ellipse(cx - r + 2, cy + 3, 5, 6, 0.4, 0, TAU); c.fill();
-  c.beginPath(); c.ellipse(cx + r - 2, cy + 3, 5, 6, -0.4, 0, TAU); c.fill();
-  // 몸통 뒤(귀 등)
-  art.behind(c, cx, cy, r, dir, color);
-  // 몸통
-  c.fillStyle = color; c.beginPath(); c.arc(cx, cy, r, 0, TAU); c.fill();
-  c.fillStyle = 'rgba(255,255,255,0.28)'; c.beginPath(); c.ellipse(cx - 5, cy - 6, 5.5, 4, -0.5, 0, TAU); c.fill();
-  // 몸통 앞 + 얼굴
-  art.front(c, cx, cy, r, dir, color);
+  (ART[char] || ART.kirby)(c, cx, cy, dir, color);
 }
 
 function drawPlayer(x, y, color, name, facing, isMe, blink, char) {
