@@ -764,7 +764,7 @@ function drawGrave(g) {
     ctx.globalAlpha = 0.5 + 0.5 * pulse;
     ctx.fillStyle = '#7fe0a0';
     ctx.font = '700 10px Segoe UI, sans-serif'; ctx.textAlign = 'center';
-    ctx.fillText('1초 터치해 부활!', bx + w / 2, by - 30);
+    ctx.fillText('터치해 부활!', bx + w / 2, by - 30);
     ctx.globalAlpha = 1;
   }
   // 닉네임 팻말
