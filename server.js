@@ -67,10 +67,12 @@ function loadLevel(room, index) {
   room.bubbles = [];
   room.rainTimer = 0;
   room.gateOpen = (lvl.gates || []).map(() => false);
-  room.plateActive = (lvl.boss?.plates || []).map(() => false);
+  room.padLit = (lvl.boss?.pads || []).map(() => false);
+  room.padActive = (lvl.boss?.pads || []).map(() => false);
   room.boss = lvl.boss
-    ? { hp: lvl.boss.hp, maxHp: lvl.boss.hp, x: (lvl.boss.minX + lvl.boss.maxX) / 2,
-        dir: 1, charge: 0, hitCd: 0, flash: 0 }
+    ? { hp: lvl.boss.hp, maxHp: lvl.boss.hp,
+        x: lvl.boss.cx - lvl.boss.w / 2, y: lvl.boss.cy - lvl.boss.h / 2,
+        charge: 0, hitCd: 0, flash: 0, seqIdx: 0, moveT: 0 }
     : null;
   for (const p of room.players.values()) respawn(p, lvl);
 }
@@ -368,37 +370,44 @@ function stepGoal(room, lvl, players) {
 
 function stepBoss(room, lvl, players) {
   const b = lvl.boss, rb = room.boss;
+  const pads = b.pads;
 
-  // 보스 좌우 이동
-  rb.x += rb.dir * b.speed;
-  if (rb.x <= b.minX) { rb.x = b.minX; rb.dir = 1; }
-  if (rb.x >= b.maxX) { rb.x = b.maxX; rb.dir = -1; }
+  // 보스: 느린 리사주 패턴으로 이리저리 날아다님
+  rb.moveT++;
+  rb.x = (b.cx - b.w / 2) + Math.sin(rb.moveT * b.wx) * b.ampX;
+  rb.y = (b.cy - b.h / 2) + Math.sin(rb.moveT * b.wy) * b.ampY;
+  if (rb.x < 0) rb.x = 0; if (rb.x + b.w > WORLD_W) rb.x = WORLD_W - b.w;
 
-  // 발판(스위치) 동시 점유 판정 — 멀리 떨어져 있어 여러 명이 필요
-  room.plateActive = b.plates.map(pl =>
-    players.some(p => overlap(p.x, p.y, P_SIZE, P_SIZE, pl.x, pl.y, pl.w, pl.h)));
-  const allHeld = room.plateActive.length > 0 && room.plateActive.every(Boolean);
+  // 이번 라운드에 빛나는 두 발판
+  const [ia, ib] = b.sequence[rb.seqIdx % b.sequence.length];
+  const occ = (i) => players.some(p => !p.trapped && overlap(p.x, p.y, P_SIZE, P_SIZE, pads[i].x, pads[i].y, pads[i].w, pads[i].h));
+  room.padLit = pads.map((_, i) => i === ia || i === ib);
+  room.padActive = pads.map((_, i) => (i === ia || i === ib) && occ(i));
+  const bothOn = occ(ia) && occ(ib);
 
   if (rb.hp > 0) {
-    if (allHeld && rb.hitCd <= 0) {
+    if (bothOn && rb.hitCd <= 0) {
       rb.charge++;
-      if (rb.charge >= b.chargeMax) { rb.hp--; rb.charge = 0; rb.hitCd = 70; rb.flash = 24; }
-    } else if (!allHeld) {
-      rb.charge = Math.max(0, rb.charge - 2);
+      if (rb.charge >= b.chargeMax) {   // 충전 완료 → 데미지 + 빛이 다음 위치로
+        rb.hp--; rb.charge = 0; rb.hitCd = 40; rb.flash = 24; rb.seqIdx++;
+      }
+    } else if (!bothOn) {
+      rb.charge = Math.max(0, rb.charge - 1);
     }
     if (rb.hitCd > 0) rb.hitCd--;
     if (rb.flash > 0) rb.flash--;
 
-    // 공격: HP가 낮을수록 돌이 더 자주/많이 떨어짐
-    const phase = rb.maxHp - rb.hp;               // 0,1,2
-    const interval = Math.max(16, 40 - phase * 9);
+    // 공격: HP가 낮을수록 돌이 더 자주/많이 (초반보다 훨씬 거세게)
+    const phase = b.hp - rb.hp;                    // 0..4
+    const interval = Math.max(10, 32 - phase * 4);
     room.rainTimer++;
     if (room.rainTimer >= interval) {
       room.rainTimer = 0;
-      spawnFaller(room, 4.5 + phase, 26);
-      if (phase >= 2) spawnFaller(room, 4.5 + phase, 26);  // 마지막 페이즈 2연발
+      spawnFaller(room, 5 + phase * 0.6, 26);
+      if (phase >= 2) spawnFaller(room, 5 + phase * 0.6, 26);
+      if (phase >= 4) spawnFaller(room, 5 + phase * 0.6, 26);  // 막판 3연발
     }
-    room.message = `보스 HP ${rb.hp} · 양쪽 발판을 동시에 밟아 공격!`;
+    room.message = `보스 HP ${rb.hp} · 빛나는 발판 2곳을 동시에 밟아라!`;
   } else {
     // 리얼 보스 격파 → 전체 클리어! (더 이상 진행 없음)
     if (!room.finished) { room.finished = true; room.fallers = []; }
@@ -426,11 +435,11 @@ function serializeState(room) {
     fallers: room.fallers.map(f => ({ id: f.id, x: Math.round(f.x), y: Math.round(f.y), w: f.w, h: f.h })),
     bubbles: room.bubbles.map(b => ({ id: b.id, x: Math.round(b.x), y: Math.round(b.y) })),
     boss: room.boss ? {
-      x: Math.round(room.boss.x), y: lvl.boss.y, w: lvl.boss.w, h: lvl.boss.h,
+      x: Math.round(room.boss.x), y: Math.round(room.boss.y), w: lvl.boss.w, h: lvl.boss.h,
       hp: room.boss.hp, maxHp: room.boss.maxHp,
       charge: room.boss.charge, chargeMax: lvl.boss.chargeMax, flash: room.boss.flash,
     } : null,
-    plates: (lvl.boss?.plates || []).map((pl, i) => ({ ...pl, active: !!room.plateActive[i] })),
+    pads: (lvl.boss?.pads || []).map((pd, i) => ({ x: pd.x, y: pd.y, w: pd.w, h: pd.h, lit: !!room.padLit[i], active: !!room.padActive[i] })),
     players: [...room.players.values()].map(p => ({
       id: p.id, name: p.name, color: p.color, char: p.char,
       x: Math.round(p.x), y: Math.round(p.y), facing: p.facing,

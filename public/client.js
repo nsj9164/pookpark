@@ -217,8 +217,8 @@ function render() {
   // 협동 게이트 + 스위치
   if (s.gates) for (const g of s.gates) drawGate(g);
 
-  // 보스 스위치(발판)
-  if (s.plates) for (const pl of s.plates) drawPlate(pl);
+  // 보스전 빛나는 발판
+  if (s.pads) for (const pd of s.pads) drawPad(pd);
 
   // 가시
   if (s.spikes) for (const sp of s.spikes) drawSpikes(sp);
@@ -677,7 +677,36 @@ function drawDropKey(dk) {
   ctx.restore();
 }
 
-// 보스 스위치 (밟으면 초록으로 켜짐)
+// 보스전 발판: 빛나면(lit) 노랗게 반짝, 밟으면(active) 초록
+function drawPad(pd) {
+  ctx.save();
+  const pulse = 0.5 + 0.5 * Math.sin(performance.now() / 180 + pd.x);
+  if (pd.active) {
+    ctx.fillStyle = '#2f6b3a';
+    roundRect(pd.x, pd.y - 4, pd.w, pd.h + 4, 4); ctx.fill();
+    ctx.fillStyle = '#4ee08a'; ctx.fillRect(pd.x, pd.y - 4, pd.w, 4);
+    ctx.fillStyle = 'rgba(78,224,138,0.30)'; ctx.fillRect(pd.x, pd.y - 40, pd.w, 40);
+  } else if (pd.lit) {
+    // 빛나는 목표 발판 — 위로 뻗는 빛기둥 + 반짝임
+    ctx.globalAlpha = 0.15 + 0.2 * pulse;
+    const g = ctx.createLinearGradient(0, pd.y - 120, 0, pd.y);
+    g.addColorStop(0, 'rgba(255,220,80,0)'); g.addColorStop(1, 'rgba(255,220,80,0.8)');
+    ctx.fillStyle = g; ctx.fillRect(pd.x, pd.y - 120, pd.w, 120);
+    ctx.globalAlpha = 1;
+    ctx.fillStyle = `rgba(60,45,15,0.9)`;
+    roundRect(pd.x, pd.y - 4, pd.w, pd.h + 4, 4); ctx.fill();
+    ctx.fillStyle = `rgba(255,${200 + pulse * 55 | 0},60,1)`;
+    ctx.fillRect(pd.x, pd.y - 4, pd.w, 5);
+    ctx.fillStyle = '#fff7c0'; ctx.font = '700 12px Segoe UI, sans-serif'; ctx.textAlign = 'center';
+    ctx.fillText('여기!', pd.x + pd.w / 2, pd.y - 10);
+  } else {
+    ctx.fillStyle = 'rgba(60,66,90,0.55)';
+    roundRect(pd.x, pd.y - 2, pd.w, pd.h + 2, 4); ctx.fill();
+  }
+  ctx.restore();
+}
+
+// (구) 보스 스위치 — 미사용
 function drawPlate(pl) {
   ctx.save();
   const on = pl.active;
