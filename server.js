@@ -83,9 +83,24 @@ function respawn(p, lvl) {
   p.coyote = 0; p.jumpBuf = 0;
   p.trapped = false; p.trapTaps = 0; p.carrier = -1;
 }
+// 열쇠가 가시(장애물)와 겹치면 옆의 안전한 자리로 밀어냄
+function safeDropPos(lvl, x, y) {
+  const kw = 26, kh = 26;
+  const hits = (kx) => (lvl.spikes || []).some(s => overlap(kx, y, kw, kh, s.x, s.y, s.w, s.h));
+  if (!hits(x)) return { x, y };
+  for (let d = 4; d <= 260; d += 4) {
+    if (x + d + kw <= WORLD_W && !hits(x + d)) return { x: x + d, y };
+    if (x - d >= 0 && !hits(x - d)) return { x: x - d, y };
+  }
+  return { x, y };
+}
+
 // 죽으면 죽은 자리에 열쇠(유령 열쇠)를 떨어뜨리고 부활
 function kill(p, lvl, room) {
-  if (room) room.dropKeys.push({ id: room.dropKeyId++, x: p.x + 2, y: Math.min(p.y + 2, WORLD_H - 70) });
+  if (room) {
+    const pos = safeDropPos(lvl, p.x + 2, Math.min(p.y + 2, WORLD_H - 70));
+    room.dropKeys.push({ id: room.dropKeyId++, x: pos.x, y: pos.y });
+  }
   respawn(p, lvl); p.blink = 42; p.deaths = (p.deaths || 0) + 1;
 }
 
