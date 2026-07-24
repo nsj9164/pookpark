@@ -274,6 +274,7 @@ function render() {
   const heldByPlayer = {};
   for (const k of s.keys) if (k.holder != null) heldByPlayer[k.holder] = (heldByPlayer[k.holder] || 0) + 1;
   for (const p of s.players) {
+    if (p.dead) continue;   // 다운된 사람은 캐릭터 대신 묘로 표시
     const pos = lerpPlayer(p, alpha);
     drawPlayer(pos.x, pos.y, p.color, p.name, p.facing, p.id === myId, p.blink, p.char);
     if (p.trapped) drawTrapBubble(pos.x, pos.y, p.taps, p.id === myId);
@@ -762,6 +763,13 @@ function drawGrave(g) {
   ctx.strokeStyle = '#4a5062'; ctx.lineWidth = 2;
   ctx.beginPath(); ctx.moveTo(bx + w / 2, by + 8); ctx.lineTo(bx + w / 2, by + 22); ctx.stroke();
   ctx.beginPath(); ctx.moveTo(bx + w / 2 - 5, by + 13); ctx.lineTo(bx + w / 2 + 5, by + 13); ctx.stroke();
+  // 부활 안내 (반짝반짝) — 다가가 터치하면 살아남
+  const pulse = 0.5 + 0.5 * Math.sin(performance.now() / 260);
+  ctx.globalAlpha = 0.5 + 0.5 * pulse;
+  ctx.fillStyle = '#7fe0a0';
+  ctx.font = '700 10px Segoe UI, sans-serif'; ctx.textAlign = 'center';
+  ctx.fillText('터치해 부활!', bx + w / 2, by - 30);
+  ctx.globalAlpha = 1;
   // 닉네임 팻말
   ctx.fillStyle = 'rgba(0,0,0,0.55)';
   ctx.font = '600 11px Segoe UI, sans-serif';

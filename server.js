@@ -46,8 +46,7 @@ function createRoom(code) {
     winTimer: 0, message: '', nextColor: 0, tick: 0,
     fallers: [], fallerId: 1, rainTimer: 0, plateActive: [], boss: null,
     bubbles: [], bubbleId: 1,
-    graves: [], graveId: 1,
-    gateOpen: [], finished: false,
+    gateOpen: [], finished: false, wipeTimer: 0,
     loop: null, _lastBc: undefined,
   };
   loadLevel(room, Number(process.env.START_LEVEL) || 0);  // START_LEVEL: 테스트/디버그용 시작 스테이지
@@ -66,8 +65,8 @@ function loadLevel(room, index) {
   room.tick = 0;
   room.fallers = [];
   room.bubbles = [];
-  room.graves = [];
   room.rainTimer = 0;
+  room.wipeTimer = 0;
   room.gateOpen = (lvl.gates || []).map(() => false);
   room.padLit = (lvl.boss?.pads || []).map(() => false);
   room.padActive = (lvl.boss?.pads || []).map(() => false);
@@ -80,23 +79,14 @@ function loadLevel(room, index) {
 }
 
 const PLAYER_HP = 5;
-// 보스전 전용 데미지: 체력 1 감소, 0이면 묘비 세우고 부활
+// 보스전 데미지: 체력 1 감소, 0이면 그 자리에 쓰러짐(다운)
 function damage(p, lvl, room, fromCx) {
-  if (p.blink > 0 || p.trapped) return;
+  if (p.blink > 0 || p.trapped || p.dead) return;
   p.hp -= 1;
   p.blink = 45;                                   // 잠깐 무적(연속 데미지 방지)
   p.vy = -5;                                       // 살짝 넉백
   if (fromCx != null) p.x += (p.x + P_SIZE / 2 < fromCx ? -14 : 14);
-  if (p.hp <= 0) {
-    room.graves.push({
-      id: room.graveId++, name: p.name,
-      x: Math.max(4, Math.min(WORLD_W - 40, p.x)),
-      y: Math.min(p.y, WORLD_H - 70),
-    });
-    p.hp = PLAYER_HP;
-    respawn(p, lvl);
-    p.blink = 70;
-  }
+  if (p.hp <= 0) downPlayer(p, lvl, room);
 }
 
 function respawn(p, lvl) {
@@ -105,6 +95,7 @@ function respawn(p, lvl) {
   p.vx = 0; p.vy = 0; p.onGround = false; p.rideMover = -1;
   p.coyote = 0; p.jumpBuf = 0;
   p.trapped = false; p.trapTaps = 0; p.carrier = -1;
+  p.dead = false;
 }
 // 열쇠가 가시(장애물)와 겹치면 옆의 안전한 자리로 밀어냄
 function safeDropPos(lvl, x, y) {
@@ -118,18 +109,34 @@ function safeDropPos(lvl, x, y) {
   return { x, y };
 }
 
-// 죽으면 '들고 있던' 열쇠만 죽은 자리에 떨어뜨리고 부활 (안 들고 있으면 아무것도 안 떨굼)
-function kill(p, lvl, room) {
-  if (room) {
-    for (const k of room.keys) {
-      if (k.holder === p.id) {
-        k.holder = null;
-        const pos = safeDropPos(lvl, p.x + 2, Math.min(p.y + 2, WORLD_H - 70));
-        k.x = pos.x; k.y = pos.y;
+// 다운(사망): 그 자리에 쓰러져 묘가 됨. 자동 부활 없음 — 다른 사람이 묘를 터치해야 부활
+function downPlayer(p, lvl, room) {
+  if (p.dead) return;
+  const offscreen = p.y > WORLD_H;   // 낙사 등은 시작 위치에 묘를 둠(못 줍는 곳 방지)
+  p.dead = true;
+  p.deadX = offscreen ? lvl.spawn.x : Math.max(4, Math.min(WORLD_W - P_SIZE - 4, p.x));
+  p.deadY = offscreen ? lvl.spawn.y : Math.min(p.y, WORLD_H - P_SIZE - 6);
+  p.hp = 0; p.trapped = false; p.trapTaps = 0; p.vx = 0; p.vy = 0; p.carrier = -1;
+  p.deaths = (p.deaths || 0) + 1;
+  // 들고 있던 열쇠는 쓰러진 자리에 떨굼
+  if (room) for (const k of room.keys) if (k.holder === p.id) {
+    k.holder = null;
+    const pos = safeDropPos(lvl, p.deadX, Math.min(p.deadY, WORLD_H - 70));
+    k.x = pos.x; k.y = pos.y;
+  }
+}
+// 살아있는 사람이 묘를 터치하면 그 자리에서 부활
+function reviveByTouch(players) {
+  for (const L of players) {
+    if (L.dead || L.trapped) continue;
+    for (const D of players) {
+      if (D === L || !D.dead) continue;
+      if (overlap(L.x, L.y, P_SIZE, P_SIZE, D.deadX, D.deadY, P_SIZE, P_SIZE)) {
+        D.dead = false; D.x = D.deadX; D.y = D.deadY;
+        D.vx = 0; D.vy = 0; D.hp = PLAYER_HP; D.blink = 55; D.carrier = -1;
       }
     }
   }
-  respawn(p, lvl); p.blink = 42; p.deaths = (p.deaths || 0) + 1;
 }
 
 // ---------------- 유틸 ----------------
@@ -220,7 +227,7 @@ function stepRoom(room) {
 
   // 일반 플레이어 물리
   for (const p of players) {
-    if (p.trapped) continue;
+    if (p.trapped || p.dead) continue;
     p.vx = 0;
     if (p.input.left) p.vx -= MOVE_SPEED;
     if (p.input.right) p.vx += MOVE_SPEED;
@@ -255,9 +262,9 @@ function stepRoom(room) {
 
   // 스택: 친구 머리 위 착지 판정 → carrier 설정(한번 붙으면 유지, 아래 참조에서 해제)
   for (const p of players) {
-    if (p.trapped) continue;
+    if (p.trapped || p.dead) continue;
     for (const q of players) {
-      if (p === q || q.trapped) continue;
+      if (p === q || q.trapped || q.dead) continue;
       const horiz = p.x < q.x + P_SIZE && p.x + P_SIZE > q.x;
       if (horiz && p.vy >= 0 && p.y + P_SIZE >= q.y - 2 && p.y + P_SIZE <= q.y + 14 && p.y < q.y) {
         p.y = q.y - P_SIZE; p.vy = 0; p.onGround = true; p.carrier = q.id;
@@ -267,7 +274,7 @@ function stepRoom(room) {
 
   // 점프 (코요테 타임 + 점프 버퍼) — 방향키와 독립. 점프하면 목마에서 내려옴
   for (const p of players) {
-    if (p.trapped) continue;
+    if (p.trapped || p.dead) continue;
     if (p.onGround) p.coyote = COYOTE; else if (p.coyote > 0) p.coyote--;
     if (p.upEdge) p.jumpBuf = JUMP_BUFFER; else if (p.jumpBuf > 0) p.jumpBuf--;
     if (p.jumpBuf > 0 && p.coyote > 0) {
@@ -279,7 +286,7 @@ function stepRoom(room) {
   const byId = new Map(players.map(p => [p.id, p]));
   const order = [...players].sort((a, b) => b.y - a.y);  // 아래(y 큰) 사람 먼저 확정
   for (const p of order) {
-    if (p.trapped || p.carrier < 0) continue;
+    if (p.trapped || p.dead || p.carrier < 0) continue;
     const b = byId.get(p.carrier);
     if (!b || b.trapped) { p.carrier = -1; continue; }
     const horiz = p.x < b.x + P_SIZE && p.x + P_SIZE > b.x;
@@ -294,7 +301,7 @@ function stepRoom(room) {
 
   // 버블 발사 (횟수 제한 없음, 짧은 연사 쿨다운만)
   for (const p of players) {
-    if (p.trapped) continue;
+    if (p.trapped || p.dead) continue;
     if (p.shootCd > 0) p.shootCd--;
     if (p.shootEdge && p.shootCd <= 0) { spawnBubble(room, p); p.shootCd = 12; }
   }
@@ -304,7 +311,7 @@ function stepRoom(room) {
     if (b.hit) continue;
     const owner = byId.get(b.owner);
     for (const q of players) {
-      if (q.id === b.owner || q.trapped) continue;
+      if (q.id === b.owner || q.trapped || q.dead) continue;
       // 같은 목마(스택)에 있는 사람은 쏜 사람 버블에 안 맞음
       if (q.carrier === b.owner || (owner && owner.carrier === q.id)) continue;
       if (overlap(b.x - 16, b.y - 16, 32, 32, q.x, q.y, P_SIZE, P_SIZE)) {
@@ -314,14 +321,28 @@ function stepRoom(room) {
   }
   room.bubbles = room.bubbles.filter(b => !b.hit && b.life > 0 && b.x > -30 && b.x < WORLD_W + 30);
 
-  // 낙사
-  for (const p of players) if (!p.trapped && p.y > WORLD_H + 80) respawn(p, lvl);
+  // 보스전에서만: 갇힌 사람의 버블을 다른 사람이 건드리면 터지며 사망(다운)
+  if (room.boss) {
+    for (const T of players) {
+      if (!T.trapped) continue;
+      for (const L of players) {
+        if (L === T || L.dead || L.trapped) continue;
+        if (overlap(L.x, L.y, P_SIZE, P_SIZE, T.x - 4, T.y - 4, P_SIZE + 8, P_SIZE + 8)) { downPlayer(T, lvl, room); break; }
+      }
+    }
+  }
 
-  // 가시 (밟으면 죽고 그 사람만 부활, 죽은 자리에 열쇠 남김) — 문 근처는 안전
+  // 살아있는 사람이 묘를 터치하면 부활
+  reviveByTouch(players);
+
+  // 낙사 → 다운
+  for (const p of players) if (!p.trapped && !p.dead && p.y > WORLD_H + 80) downPlayer(p, lvl, room);
+
+  // 가시 → 다운 (문 근처는 안전)
   for (const p of players) {
-    if (p.trapped || p.blink > 0 || nearDoor(p, lvl)) continue;
+    if (p.trapped || p.dead || p.blink > 0 || nearDoor(p, lvl)) continue;
     for (const sp of (lvl.spikes || [])) {
-      if (overlap(p.x + 4, p.y + 4, P_SIZE - 8, P_SIZE - 8, sp.x, sp.y, sp.w, sp.h)) { kill(p, lvl, room); break; }
+      if (overlap(p.x + 4, p.y + 4, P_SIZE - 8, P_SIZE - 8, sp.x, sp.y, sp.w, sp.h)) { downPlayer(p, lvl, room); break; }
     }
   }
 
@@ -334,6 +355,11 @@ function stepRoom(room) {
 
   // 무적 깜빡임 감소
   for (const p of players) if (p.blink > 0) p.blink--;
+
+  // 전멸(모두 다운) 방지: 아무도 안 살아있으면 잠시 후 시작 위치에서 전원 부활
+  if (players.length > 0 && players.every(p => p.dead)) {
+    if (++room.wipeTimer > 150) { for (const p of players) { respawn(p, lvl); p.hp = PLAYER_HP; p.blink = 55; } room.wipeTimer = 0; }
+  } else room.wipeTimer = 0;
 }
 
 function updateRain(room, lvl, players) {
@@ -350,13 +376,13 @@ function updateRain(room, lvl, players) {
     }
   }
   for (const f of room.fallers) f.y += f.vy;
-  // 충돌 — 보스전에선 체력 1 감소, 그 외엔 즉사(문 근처는 안전)
+  // 충돌 — 보스전에선 체력 1 감소, 그 외엔 다운(문 근처는 안전)
   for (const p of players) {
-    if (p.trapped || p.blink > 0 || nearDoor(p, lvl)) continue;
+    if (p.trapped || p.dead || p.blink > 0 || nearDoor(p, lvl)) continue;
     for (const f of room.fallers) {
       if (overlap(p.x + 3, p.y + 3, P_SIZE - 6, P_SIZE - 6, f.x, f.y, f.w, f.h)) {
         if (room.boss) damage(p, lvl, room, f.x + f.w / 2);
-        else kill(p, lvl, room);
+        else downPlayer(p, lvl, room);
         f.y = WORLD_H + 999; break;
       }
     }
@@ -368,7 +394,7 @@ function stepGoal(room, lvl, players) {
   const byId = new Map(players.map(p => [p.id, p]));
   // 수집: 월드에 놓인 열쇠를 밟으면 그 사람이 '들고' 있게 됨
   for (const p of players) {
-    if (p.trapped) continue;
+    if (p.trapped || p.dead) continue;
     for (const k of room.keys)
       if (k.holder === null && overlap(p.x, p.y, P_SIZE, P_SIZE, k.x, k.y, 26, 26)) k.holder = p.id;
   }
@@ -381,9 +407,11 @@ function stepGoal(room, lvl, players) {
   }
   room.doorOpen = room.keys.length > 0 && room.keys.every(k => k.holder !== null);
 
-  if (room.doorOpen && players.length > 0) {
+  // 문은 '살아있는' 사람만 다 모이면 통과 (다운된 사람은 제외)
+  const living = players.filter(p => !p.dead);
+  if (room.doorOpen && living.length > 0) {
     const d = lvl.door;
-    const allAtDoor = players.every(p => overlap(p.x, p.y, P_SIZE, P_SIZE, d.x, d.y, d.w, d.h));
+    const allAtDoor = living.every(p => overlap(p.x, p.y, P_SIZE, P_SIZE, d.x, d.y, d.w, d.h));
     if (allAtDoor) {
       room.winTimer += TICK;
       room.message = '클리어! 다음 스테이지로...';
@@ -402,14 +430,15 @@ function stepBoss(room, lvl, players) {
   rb.y = (b.cy - b.h / 2) + Math.sin(rb.moveT * b.wy) * b.ampY;
   if (rb.x < 0) rb.x = 0; if (rb.x + b.w > WORLD_W) rb.x = WORLD_W - b.w;
 
-  // 보스 몸에 닿으면 체력 1 감소 (0이면 묘비)
+  // 보스 몸에 닿으면 체력 1 감소 (0이면 다운)
   for (const p of players) {
+    if (p.dead || p.trapped) continue;
     if (overlap(p.x + 3, p.y + 3, P_SIZE - 6, P_SIZE - 6, rb.x, rb.y, b.w, b.h)) damage(p, lvl, room, rb.x + b.w / 2);
   }
 
   // 이번 라운드에 빛나는 두 발판
   const [ia, ib] = b.sequence[rb.seqIdx % b.sequence.length];
-  const occ = (i) => players.some(p => !p.trapped && overlap(p.x, p.y, P_SIZE, P_SIZE, pads[i].x, pads[i].y, pads[i].w, pads[i].h));
+  const occ = (i) => players.some(p => !p.trapped && !p.dead && overlap(p.x, p.y, P_SIZE, P_SIZE, pads[i].x, pads[i].y, pads[i].w, pads[i].h));
   room.padLit = pads.map((_, i) => i === ia || i === ib);
   room.padActive = pads.map((_, i) => (i === ia || i === ib) && occ(i));
   const bothOn = occ(ia) && occ(ib);
@@ -469,13 +498,13 @@ function serializeState(room) {
       charge: room.boss.charge, chargeMax: lvl.boss.chargeMax, flash: room.boss.flash,
     } : null,
     pads: (lvl.boss?.pads || []).map((pd, i) => ({ x: pd.x, y: pd.y, w: pd.w, h: pd.h, lit: !!room.padLit[i], active: !!room.padActive[i] })),
-    graves: room.graves,
+    graves: [...room.players.values()].filter(p => p.dead).map(p => ({ x: p.deadX, y: p.deadY, name: p.name })),
     players: [...room.players.values()].map(p => ({
       id: p.id, name: p.name, color: p.color, char: p.char,
       x: Math.round(p.x), y: Math.round(p.y), facing: p.facing,
       blink: p.blink > 0 ? 1 : 0, deaths: p.deaths || 0,
       trapped: p.trapped ? 1 : 0, taps: p.trapTaps || 0,
-      hp: p.hp,
+      hp: p.hp, dead: p.dead ? 1 : 0,
     })),
   };
 }
@@ -530,6 +559,7 @@ wss.on('connection', (ws) => {
         facing: 1, x: 0, y: 0, vx: 0, vy: 0, _px: 0, onGround: false,
         rideMover: -1, coyote: 0, jumpBuf: 0, blink: 0, deaths: 0,
         shootCd: 0, trapped: false, trapTaps: 0, carrier: -1, hp: 5,
+        dead: false, deadX: 0, deadY: 0,
       };
       respawn(player, lvl);
       room.players.set(player.id, player);
