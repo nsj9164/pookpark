@@ -46,7 +46,7 @@ function createRoom(code) {
     code, players: new Map(), levelIndex: 0, keys: [], doorOpen: false,
     winTimer: 0, message: '', nextColor: 0, tick: 0,
     fallers: [], fallerId: 1, rainTimer: 0, plateActive: [], boss: null,
-    bubbles: [], bubbleId: 1, dropKeys: [], dropKeyId: 1,
+    bubbles: [], bubbleId: 1,
     gateOpen: [], finished: false,
     loop: null, _lastBc: undefined,
   };
@@ -58,14 +58,14 @@ function createRoom(code) {
 function loadLevel(room, index) {
   room.levelIndex = index;
   const lvl = LEVELS[index % LEVELS.length];
-  room.keys = lvl.keys.map((k, i) => ({ id: i, x: k.x, y: k.y, collected: false }));
+  // 열쇠는 개인이 '들고' 다님: holder=null 이면 월드에 놓인 상태, 아니면 그 사람이 소지
+  room.keys = lvl.keys.map((k, i) => ({ id: i, x: k.x, y: k.y, hx: k.x, hy: k.y, holder: null }));
   room.doorOpen = false;
   room.winTimer = 0;
   room.message = lvl.name || '';
   room.tick = 0;
   room.fallers = [];
   room.bubbles = [];
-  room.dropKeys = [];
   room.rainTimer = 0;
   room.gateOpen = (lvl.gates || []).map(() => false);
   room.plateActive = (lvl.boss?.plates || []).map(() => false);
@@ -95,11 +95,16 @@ function safeDropPos(lvl, x, y) {
   return { x, y };
 }
 
-// 죽으면 죽은 자리에 열쇠(유령 열쇠)를 떨어뜨리고 부활
+// 죽으면 '들고 있던' 열쇠만 죽은 자리에 떨어뜨리고 부활 (안 들고 있으면 아무것도 안 떨굼)
 function kill(p, lvl, room) {
   if (room) {
-    const pos = safeDropPos(lvl, p.x + 2, Math.min(p.y + 2, WORLD_H - 70));
-    room.dropKeys.push({ id: room.dropKeyId++, x: pos.x, y: pos.y });
+    for (const k of room.keys) {
+      if (k.holder === p.id) {
+        k.holder = null;
+        const pos = safeDropPos(lvl, p.x + 2, Math.min(p.y + 2, WORLD_H - 70));
+        k.x = pos.x; k.y = pos.y;
+      }
+    }
   }
   respawn(p, lvl); p.blink = 42; p.deaths = (p.deaths || 0) + 1;
 }
@@ -281,12 +286,6 @@ function stepRoom(room) {
   }
   room.bubbles = room.bubbles.filter(b => !b.hit && b.life > 0 && b.x > -30 && b.x < WORLD_W + 30);
 
-  // 떨어진 열쇠 줍기(누구나) — 죽은 자리에 남은 열쇠
-  for (const p of players) {
-    if (p.trapped) continue;
-    room.dropKeys = room.dropKeys.filter(dk => !overlap(p.x, p.y, P_SIZE, P_SIZE, dk.x, dk.y, 26, 26));
-  }
-
   // 낙사
   for (const p of players) if (!p.trapped && p.y > WORLD_H + 80) respawn(p, lvl);
 
@@ -336,11 +335,21 @@ function updateRain(room, lvl, players) {
 }
 
 function stepGoal(room, lvl, players) {
-  for (const p of players)
+  const byId = new Map(players.map(p => [p.id, p]));
+  // 수집: 월드에 놓인 열쇠를 밟으면 그 사람이 '들고' 있게 됨
+  for (const p of players) {
+    if (p.trapped) continue;
     for (const k of room.keys)
-      if (!k.collected && overlap(p.x, p.y, P_SIZE, P_SIZE, k.x, k.y, 26, 26)) k.collected = true;
-
-  room.doorOpen = room.keys.length > 0 && room.keys.every(k => k.collected);
+      if (k.holder === null && overlap(p.x, p.y, P_SIZE, P_SIZE, k.x, k.y, 26, 26)) k.holder = p.id;
+  }
+  // 들고 있는 열쇠는 주인을 따라다님(표시/드롭 위치용)
+  for (const k of room.keys) {
+    if (k.holder !== null) {
+      const h = byId.get(k.holder);
+      if (h) { k.x = h.x + 2; k.y = h.y - 16; }
+    }
+  }
+  room.doorOpen = room.keys.length > 0 && room.keys.every(k => k.holder !== null);
 
   if (room.doorOpen && players.length > 0) {
     const d = lvl.door;
@@ -408,8 +417,8 @@ function serializeState(room) {
       sw: g.sw, sw2: g.sw2 || null,
     })),
     door: lvl.door || null, doorOpen: room.doorOpen,
-    keys: room.keys, message: room.message,
-    dropKeys: room.dropKeys,
+    message: room.message,
+    keys: room.keys.map(k => ({ id: k.id, x: Math.round(k.x), y: Math.round(k.y), holder: k.holder })),
     fallers: room.fallers.map(f => ({ id: f.id, x: Math.round(f.x), y: Math.round(f.y), w: f.w, h: f.h })),
     bubbles: room.bubbles.map(b => ({ id: b.id, x: Math.round(b.x), y: Math.round(b.y) })),
     boss: room.boss ? {
@@ -499,6 +508,8 @@ wss.on('connection', (ws) => {
 
   ws.on('close', () => {
     if (room && player) {
+      // 나간 사람이 들고 있던 열쇠는 원래 자리로 되돌림(게임이 막히지 않게)
+      for (const k of room.keys) if (k.holder === player.id) { k.holder = null; k.x = k.hx; k.y = k.hy; }
       room.players.delete(player.id);
       console.log(`[room ${room.code}] ${player.name} 퇴장 (남은 ${room.players.size}명)`);
       stopRoomIfEmpty(room);

@@ -223,14 +223,11 @@ function render() {
   // 가시
   if (s.spikes) for (const sp of s.spikes) drawSpikes(sp);
 
-  // 떨어진 열쇠(죽은 자리)
-  if (s.dropKeys) for (const dk of s.dropKeys) drawDropKey(dk);
+  // 월드에 놓인/떨군 열쇠 (아무도 안 든 것)
+  for (const k of s.keys) if (k.holder == null) drawKey(k);
 
   // 문 (보스전은 문이 없음)
   if (s.door) drawDoor(s.door, s.doorOpen);
-
-  // 열쇠
-  for (const k of s.keys) if (!k.collected) drawKey(k);
 
   // 보스
   if (s.boss) drawBoss(s.boss);
@@ -249,10 +246,13 @@ function render() {
   }
 
   // 플레이어 (이전 상태와 보간)
+  const heldByPlayer = {};
+  for (const k of s.keys) if (k.holder != null) heldByPlayer[k.holder] = (heldByPlayer[k.holder] || 0) + 1;
   for (const p of s.players) {
     const pos = lerpPlayer(p, alpha);
     drawPlayer(pos.x, pos.y, p.color, p.name, p.facing, p.id === myId, p.blink, p.char);
     if (p.trapped) drawTrapBubble(pos.x, pos.y, p.taps, p.id === myId);
+    if (heldByPlayer[p.id]) drawHeldKey(pos.x, pos.y, heldByPlayer[p.id]);  // 열쇠 든 사람 표시
   }
 
   // 내 버블 잔량 표시
@@ -612,6 +612,27 @@ function drawMover(m) {
     ctx.beginPath(); ctx.moveTo(m.x + i, m.y + m.h - 3); ctx.lineTo(m.x + i + 6, m.y + 5); ctx.stroke();
   }
   ctx.restore();
+}
+
+// 열쇠를 든 사람 머리 위에 작은 열쇠 뱃지 (개수 포함)
+function drawHeldKey(x, y, count) {
+  ctx.save();
+  const cx = x + P_SIZE / 2, cy = y - 30 + Math.sin(performance.now() / 250 + x) * 2;
+  ctx.translate(cx, cy);
+  ctx.scale(0.8, 0.8);
+  ctx.fillStyle = '#ffd23f';
+  ctx.beginPath(); ctx.arc(-4, 0, 7, 0, Math.PI * 2); ctx.fill();
+  ctx.fillStyle = '#0e1018';
+  ctx.beginPath(); ctx.arc(-4, 0, 2.6, 0, Math.PI * 2); ctx.fill();
+  ctx.fillStyle = '#ffd23f';
+  ctx.fillRect(2, -2, 11, 4); ctx.fillRect(9, -2, 3, 6);
+  ctx.restore();
+  if (count > 1) {
+    ctx.save();
+    ctx.fillStyle = '#fff'; ctx.font = '700 11px Segoe UI, sans-serif'; ctx.textAlign = 'left';
+    ctx.fillText('×' + count, cx + 8, cy + 4);
+    ctx.restore();
+  }
 }
 
 // 협동 게이트 (닫히면 벽, 열리면 반투명) + 연결된 스위치
