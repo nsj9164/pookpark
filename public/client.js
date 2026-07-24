@@ -223,6 +223,9 @@ function render() {
   // 가시
   if (s.spikes) for (const sp of s.spikes) drawSpikes(sp);
 
+  // 묘비 (보스전에서 체력 다 닳아 죽은 자리)
+  if (s.graves) for (const g of s.graves) drawGrave(g);
+
   // 월드에 놓인/떨군 열쇠 (아무도 안 든 것)
   for (const k of s.keys) if (k.holder == null) drawKey(k);
 
@@ -253,6 +256,7 @@ function render() {
     drawPlayer(pos.x, pos.y, p.color, p.name, p.facing, p.id === myId, p.blink, p.char);
     if (p.trapped) drawTrapBubble(pos.x, pos.y, p.taps, p.id === myId);
     if (heldByPlayer[p.id]) drawHeldKey(pos.x, pos.y, heldByPlayer[p.id]);  // 열쇠 든 사람 표시
+    if (s.boss && p.hp != null) drawHpHearts(pos.x, pos.y, p.hp);           // 보스전 체력
   }
 
   // 배너 (클리어 / 보스 격파)
@@ -629,6 +633,55 @@ function drawHeldKey(x, y, count) {
     ctx.fillText('×' + count, cx + 8, cy + 4);
     ctx.restore();
   }
+}
+
+// 묘비 (닉네임 새김) — 체력 다 닳아 죽은 자리
+function drawGrave(g) {
+  ctx.save();
+  const bx = g.x, by = g.y, w = 28, h = 40;
+  // 봉분 그림자
+  ctx.fillStyle = 'rgba(0,0,0,0.25)';
+  ctx.beginPath(); ctx.ellipse(bx + w / 2, by + h, 20, 5, 0, 0, Math.PI * 2); ctx.fill();
+  // 비석
+  ctx.fillStyle = '#8a93a6';
+  ctx.beginPath();
+  ctx.moveTo(bx, by + h);
+  ctx.lineTo(bx, by + 12);
+  ctx.arc(bx + w / 2, by + 12, w / 2, Math.PI, 0);
+  ctx.lineTo(bx + w, by + h);
+  ctx.closePath(); ctx.fill();
+  ctx.fillStyle = '#6c7488';
+  ctx.fillRect(bx + 2, by + h - 4, w - 4, 4);
+  // R.I.P + 십자
+  ctx.strokeStyle = '#4a5062'; ctx.lineWidth = 2;
+  ctx.beginPath(); ctx.moveTo(bx + w / 2, by + 8); ctx.lineTo(bx + w / 2, by + 22); ctx.stroke();
+  ctx.beginPath(); ctx.moveTo(bx + w / 2 - 5, by + 13); ctx.lineTo(bx + w / 2 + 5, by + 13); ctx.stroke();
+  // 닉네임 팻말
+  ctx.fillStyle = 'rgba(0,0,0,0.55)';
+  ctx.font = '600 11px Segoe UI, sans-serif';
+  const tw = ctx.measureText(g.name).width;
+  roundRect(bx + w / 2 - tw / 2 - 4, by - 15, tw + 8, 15, 4); ctx.fill();
+  ctx.fillStyle = '#e8ecf5'; ctx.textAlign = 'center';
+  ctx.fillText(g.name, bx + w / 2, by - 4);
+  ctx.restore();
+}
+
+// 보스전 체력 하트 (머리 위)
+function drawHpHearts(x, y, hp) {
+  ctx.save();
+  const n = 5, cx = x + P_SIZE / 2, top = y - 40;
+  for (let i = 0; i < n; i++) {
+    const hx = cx - (n - 1) * 5 + i * 10, hy = top;
+    ctx.fillStyle = i < hp ? '#ff5c7a' : 'rgba(255,255,255,0.22)';
+    ctx.beginPath();
+    ctx.moveTo(hx, hy + 2);
+    ctx.bezierCurveTo(hx, hy, hx - 4, hy, hx - 4, hy + 2.5);
+    ctx.bezierCurveTo(hx - 4, hy + 5, hx, hy + 6.5, hx, hy + 8);
+    ctx.bezierCurveTo(hx, hy + 6.5, hx + 4, hy + 5, hx + 4, hy + 2.5);
+    ctx.bezierCurveTo(hx + 4, hy, hx, hy, hx, hy + 2);
+    ctx.fill();
+  }
+  ctx.restore();
 }
 
 // 협동 게이트 (닫히면 벽, 열리면 반투명) + 연결된 스위치
