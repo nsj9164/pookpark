@@ -154,11 +154,12 @@ function stepRoom(room) {
     }
   }
 
-  // 버블에 갇힌 플레이어: 물리 무시, 위로 둥실 → 스페이스로 탈출
+  // 버블에 갇힌 플레이어: 물리 무시, 계속 위로 → 하늘을 넘으면 아래에서 다시 올라옴(순환)
   for (const p of players) {
     if (!p.trapped) continue;
     p.vx = 0; p.vy = 0; p.rideMover = -1; p.carrier = -1;
-    if (p.y > 66) p.y -= 2.2; else p.y = 66 + Math.sin(room.tick * 0.09) * 7;
+    p.y -= 2.4;                                       // 쭈우욱 위로
+    if (p.y + P_SIZE < -4) p.y = WORLD_H + 4;         // 하늘을 넘어가면 화면 아래에서 재등장
     p.x += Math.sin(room.tick * 0.05 + p.id) * 0.6;
     if (p.x < 0) p.x = 0; if (p.x + P_SIZE > WORLD_W) p.x = WORLD_W - P_SIZE;
     if (p.upEdge) {

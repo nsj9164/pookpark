@@ -311,6 +311,8 @@ function lerpPlayer(p, alpha) {
   if (!prevState) return { x: p.x, y: p.y };
   const prev = prevState.players.find(o => o.id === p.id);
   if (!prev) return { x: p.x, y: p.y };
+  // 화면을 넘어가며 순환(위→아래)할 때 보간 줄무늬 방지: 큰 점프면 스냅
+  if (Math.abs(p.y - prev.y) > 200 || Math.abs(p.x - prev.x) > 200) return { x: p.x, y: p.y };
   return { x: prev.x + (p.x - prev.x) * alpha, y: prev.y + (p.y - prev.y) * alpha };
 }
 
