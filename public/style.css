@@ -100,3 +100,22 @@ canvas {
   max-width: 960px; line-height: 1.7;
 }
 #hint b { color: var(--text); }
+
+/* 캐릭터 선택 (히든) */
+#charSelect { margin-top: 6px; }
+.hiddenTag {
+  font-size: 11px; color: #ffd23f; background: rgba(255,210,63,0.12);
+  padding: 2px 7px; border-radius: 6px; margin-left: 6px; vertical-align: middle;
+}
+#charGrid {
+  display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; margin-top: 8px;
+}
+.charBtn {
+  display: flex; flex-direction: column; align-items: center; gap: 3px;
+  padding: 8px 4px; background: #1a1f2e; border: 2px solid transparent;
+  border-radius: 12px; cursor: pointer; color: var(--muted); font-size: 12px;
+  transition: background .12s, border-color .12s;
+}
+.charBtn canvas { display: block; }
+.charBtn:hover { background: #222842; color: var(--text); }
+.charBtn.sel { border-color: var(--accent2); background: #16301f; color: #eafff2; }

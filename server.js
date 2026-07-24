@@ -25,6 +25,7 @@ const GRAVITY = 0.7, MOVE_SPEED = 4.2, JUMP_V = -13.5, MAX_FALL = 16;
 const COYOTE = 7;        // 발판에서 떨어진 뒤에도 잠깐 점프 허용
 const JUMP_BUFFER = 7;   // 착지 직전에 미리 누른 점프 기억
 const COLORS = ['#ff5c5c', '#4ea3ff', '#4ee08a', '#ffd23f', '#c76bff', '#ff9e3f', '#3fe0d0', '#ff6bc0'];
+const CHAR_IDS = ['kirby', 'dog', 'cat', 'bubble', 'bear', 'otter', 'pigeon', 'rabbit'];
 
 // ---------------- 방 ----------------
 const rooms = new Map();
@@ -364,7 +365,7 @@ function serializeState(room) {
     } : null,
     plates: (lvl.boss?.plates || []).map((pl, i) => ({ ...pl, active: !!room.plateActive[i] })),
     players: [...room.players.values()].map(p => ({
-      id: p.id, name: p.name, color: p.color,
+      id: p.id, name: p.name, color: p.color, char: p.char,
       x: Math.round(p.x), y: Math.round(p.y), facing: p.facing,
       blink: p.blink > 0 ? 1 : 0, deaths: p.deaths || 0,
       trapped: p.trapped ? 1 : 0, taps: p.trapTaps || 0,
@@ -415,6 +416,7 @@ wss.on('connection', (ws) => {
       const lvl = LEVELS[room.levelIndex % LEVELS.length];
       player = {
         id: nextId++, name: (msg.name || 'Player').slice(0, 12),
+        char: CHAR_IDS.includes(msg.char) ? msg.char : 'kirby',   // 미선택/이상값 → 커비
         color: COLORS[room.nextColor++ % COLORS.length], ws,
         input: { left: false, right: false, up: false, shoot: false },
         prevUp: false, prevShoot: false, upEdge: false, shootEdge: false,
