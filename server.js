@@ -111,6 +111,12 @@ function safeDropPos(lvl, x, y) {
   return { x, y };
 }
 
+// 묘가 바닥/발판 위에 있는지 (공중이면 홀드 어려워서 1번 터치 부활)
+function graveGrounded(lvl, gx, gy) {
+  const feet = gy + P_SIZE, cx = gx + P_SIZE / 2;
+  const surfaces = (lvl.platforms || []).concat(lvl.tramps || []);
+  return surfaces.some(s => cx >= s.x - 2 && cx <= s.x + s.w + 2 && feet >= s.y - 2 && feet <= s.y + 12);
+}
 // 다운(사망): 그 자리에 쓰러져 묘가 됨. 자동 부활 없음 — 다른 사람이 묘를 터치해야 부활
 function downPlayer(p, lvl, room) {
   if (p.dead) return;
@@ -118,6 +124,7 @@ function downPlayer(p, lvl, room) {
   p.dead = true;
   p.deadX = offscreen ? lvl.spawn.x : Math.max(4, Math.min(WORLD_W - P_SIZE - 4, p.x));
   p.deadY = offscreen ? lvl.spawn.y : Math.min(p.y, WORLD_H - P_SIZE - 6);
+  p.deadAir = !offscreen && !graveGrounded(lvl, p.deadX, p.deadY);   // 공중 묘 여부
   p.hp = 0; p.trapped = false; p.trapTaps = 0; p.vx = 0; p.vy = 0; p.carrier = -1;
   p.reviveProgress = 0;
   p.deaths = (p.deaths || 0) + 1;
@@ -137,7 +144,8 @@ function reviveByTouch(players) {
       && overlap(L.x, L.y, P_SIZE, P_SIZE, D.deadX, D.deadY, P_SIZE, P_SIZE));
     if (touched) {
       D.reviveProgress = (D.reviveProgress || 0) + 1;
-      if (D.reviveProgress >= REVIVE_TICKS) {
+      const need = D.deadAir ? 1 : REVIVE_TICKS;   // 공중 묘는 1번 터치로 즉시
+      if (D.reviveProgress >= need) {
         D.dead = false; D.x = D.deadX; D.y = D.deadY;
         D.vx = 0; D.vy = 0; D.hp = PLAYER_HP; D.blink = 55; D.carrier = -1; D.reviveProgress = 0;
       }
@@ -512,7 +520,7 @@ function serializeState(room) {
       charge: room.boss.charge, chargeMax: lvl.boss.chargeMax, flash: room.boss.flash,
     } : null,
     pads: (lvl.boss?.pads || []).map((pd, i) => ({ x: pd.x, y: pd.y, w: pd.w, h: pd.h, lit: !!room.padLit[i], active: !!room.padActive[i] })),
-    graves: [...room.players.values()].filter(p => p.dead).map(p => ({ x: p.deadX, y: p.deadY, name: p.name, prog: Math.min(1, (p.reviveProgress || 0) / REVIVE_TICKS) })),
+    graves: [...room.players.values()].filter(p => p.dead).map(p => ({ x: p.deadX, y: p.deadY, name: p.name, air: !!p.deadAir, prog: p.deadAir ? 0 : Math.min(1, (p.reviveProgress || 0) / REVIVE_TICKS) })),
     players: [...room.players.values()].map(p => ({
       id: p.id, name: p.name, color: p.color, char: p.char,
       x: Math.round(p.x), y: Math.round(p.y), facing: p.facing,
