@@ -110,7 +110,7 @@ function showToast(text) {
 }
 
 // ---------------- 입력 ----------------
-const input = { left: false, right: false, up: false };
+const input = { left: false, right: false, up: false, shoot: false };
 let lastSent = '';
 
 function setKey(e, down) {
@@ -119,16 +119,17 @@ function setKey(e, down) {
     case 'ArrowLeft': case 'KeyA': input.left = down; break;
     case 'ArrowRight': case 'KeyD': input.right = down; break;
     case 'ArrowUp': case 'KeyW': case 'Space': input.up = down; break;
+    case 'KeyF': case 'KeyJ': case 'ShiftLeft': case 'ShiftRight': input.shoot = down; break;
     default: changed = false;
   }
   if (changed) { e.preventDefault(); sendInput(); }
 }
 function sendInput() {
   if (!ws || ws.readyState !== WebSocket.OPEN) return;
-  const packed = `${input.left ? 1 : 0}${input.right ? 1 : 0}${input.up ? 1 : 0}`;
+  const packed = `${input.left ? 1 : 0}${input.right ? 1 : 0}${input.up ? 1 : 0}${input.shoot ? 1 : 0}`;
   if (packed === lastSent) return;
   lastSent = packed;
-  ws.send(JSON.stringify({ t: 'input', left: input.left, right: input.right, up: input.up }));
+  ws.send(JSON.stringify({ t: 'input', left: input.left, right: input.right, up: input.up, shoot: input.shoot }));
 }
 window.addEventListener('keydown', e => { if (!e.repeat) setKey(e, true); });
 window.addEventListener('keyup', e => setKey(e, false));
@@ -172,10 +173,18 @@ function render() {
     drawFaller(pf ? lerpRect(pf, f, alpha) : f);
   }
 
+  // 발사된 버블 (id로 보간)
+  if (s.bubbles) for (const bb of s.bubbles) {
+    const pb = prevState?.bubbles?.find(o => o.id === bb.id);
+    const pos = pb ? { x: pb.x + (bb.x - pb.x) * alpha, y: pb.y + (bb.y - pb.y) * alpha } : bb;
+    drawBubble(pos.x, pos.y, 15);
+  }
+
   // 플레이어 (이전 상태와 보간)
   for (const p of s.players) {
     const pos = lerpPlayer(p, alpha);
     drawPlayer(pos.x, pos.y, p.color, p.name, p.facing, p.id === myId, p.blink);
+    if (p.trapped) drawTrapBubble(pos.x, pos.y, p.taps, p.id === myId);
   }
 
   // 배너 (클리어 / 보스 격파)
@@ -443,6 +452,51 @@ function drawFaller(f) {
   ctx.beginPath(); ctx.arc(cx + r * 0.3, cy + r * 0.2, r * 0.3, 0, Math.PI * 2); ctx.fill();
   ctx.fillStyle = 'rgba(255,255,255,0.18)';
   ctx.beginPath(); ctx.arc(cx - r * 0.35, cy - r * 0.35, r * 0.25, 0, Math.PI * 2); ctx.fill();
+  ctx.restore();
+}
+
+// 날아가는 버블
+function drawBubble(cx, cy, r) {
+  ctx.save();
+  ctx.fillStyle = 'rgba(140,210,255,0.18)';
+  ctx.beginPath(); ctx.arc(cx, cy, r, 0, Math.PI * 2); ctx.fill();
+  ctx.strokeStyle = 'rgba(180,230,255,0.85)';
+  ctx.lineWidth = 2;
+  ctx.beginPath(); ctx.arc(cx, cy, r, 0, Math.PI * 2); ctx.stroke();
+  ctx.fillStyle = 'rgba(255,255,255,0.7)';
+  ctx.beginPath(); ctx.arc(cx - r * 0.35, cy - r * 0.35, r * 0.18, 0, Math.PI * 2); ctx.fill();
+  ctx.restore();
+}
+
+// 갇힌 플레이어를 감싸는 버블 + 탈출 게이지
+function drawTrapBubble(x, y, taps, isMe) {
+  ctx.save();
+  const cx = x + P_SIZE / 2, cy = y + P_SIZE / 2, r = 26;
+  // 무지갯빛 버블
+  const g = ctx.createRadialGradient(cx - 6, cy - 6, 2, cx, cy, r);
+  g.addColorStop(0, 'rgba(255,255,255,0.5)');
+  g.addColorStop(0.6, 'rgba(150,210,255,0.15)');
+  g.addColorStop(1, 'rgba(150,210,255,0.05)');
+  ctx.fillStyle = g;
+  ctx.beginPath(); ctx.arc(cx, cy, r, 0, Math.PI * 2); ctx.fill();
+  ctx.strokeStyle = 'rgba(190,235,255,0.9)';
+  ctx.lineWidth = 2.5;
+  ctx.beginPath(); ctx.arc(cx, cy, r, 0, Math.PI * 2); ctx.stroke();
+  ctx.fillStyle = 'rgba(255,255,255,0.8)';
+  ctx.beginPath(); ctx.arc(cx - 9, cy - 9, 4, 0, Math.PI * 2); ctx.fill();
+
+  // 탈출 게이지 (10번 눌러야 터짐)
+  const left = Math.max(0, 10 - taps);
+  ctx.fillStyle = '#ffd23f';
+  ctx.font = '700 13px Segoe UI, sans-serif';
+  ctx.textAlign = 'center';
+  ctx.fillText(isMe ? `스페이스 ${left}번!` : `${left}`, cx, y - 28);
+  // 게이지 바
+  const bw = 40, bx = cx - bw / 2, by = y - 24;
+  ctx.fillStyle = 'rgba(0,0,0,0.4)';
+  roundRect(bx, by, bw, 5, 3); ctx.fill();
+  ctx.fillStyle = '#4ee08a';
+  roundRect(bx, by, bw * (taps / 10), 5, 3); ctx.fill();
   ctx.restore();
 }
 

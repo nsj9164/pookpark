@@ -43,6 +43,7 @@ function createRoom(code) {
     code, players: new Map(), levelIndex: 0, keys: [], doorOpen: false,
     winTimer: 0, message: '', nextColor: 0, tick: 0,
     fallers: [], fallerId: 1, rainTimer: 0, plateActive: [], boss: null,
+    bubbles: [], bubbleId: 1,
     loop: null, _lastBc: undefined,
   };
   loadLevel(room, Number(process.env.START_LEVEL) || 0);  // START_LEVEL: 테스트/디버그용 시작 스테이지
@@ -59,6 +60,7 @@ function loadLevel(room, index) {
   room.message = lvl.name || '';
   room.tick = 0;
   room.fallers = [];
+  room.bubbles = [];
   room.rainTimer = 0;
   room.plateActive = (lvl.boss?.plates || []).map(() => false);
   room.boss = lvl.boss
@@ -73,6 +75,7 @@ function respawn(p, lvl) {
   p.y = lvl.spawn.y;
   p.vx = 0; p.vy = 0; p.onGround = false; p.rideMover = -1;
   p.coyote = 0; p.jumpBuf = 0;
+  p.trapped = false; p.trapTaps = 0; p.carrier = -1;
 }
 function kill(p, lvl) { respawn(p, lvl); p.blink = 42; p.deaths = (p.deaths || 0) + 1; }
 
@@ -94,12 +97,28 @@ function spawnFaller(room, speed, size) {
     vy: speed + Math.random() * 1.5,
   });
 }
+function spawnBubble(room, p) {
+  const dir = p.facing >= 0 ? 1 : -1;
+  room.bubbles.push({
+    id: room.bubbleId++, owner: p.id,
+    x: p.x + P_SIZE / 2 + dir * 24, y: p.y + P_SIZE / 2,
+    vx: dir * 6.5, life: 75, hit: false,
+  });
+}
 
 // ---------------- 물리 스텝 ----------------
 function stepRoom(room) {
   const lvl = LEVELS[room.levelIndex % LEVELS.length];
   const players = [...room.players.values()];
   room.tick++;
+
+  // 입력 에지(누른 순간) 계산 — 점프/발사/버블탈출에 사용
+  for (const p of players) {
+    p.upEdge = p.input.up && !p.prevUp;
+    p.shootEdge = p.input.shoot && !p.prevShoot;
+    p.prevUp = p.input.up; p.prevShoot = p.input.shoot;
+    p._px = p.x;
+  }
 
   // 움직이는 발판: 현재/이전 위치와 이동량
   const movers = lvl.movers || [];
@@ -111,14 +130,28 @@ function stepRoom(room) {
 
   // 발판에 탄 플레이어를 함께 이동
   for (const p of players) {
-    if (p.rideMover >= 0 && p.rideMover < deltaM.length) {
+    if (!p.trapped && p.rideMover >= 0 && p.rideMover < deltaM.length) {
       p.x += deltaM[p.rideMover].dx;
       p.y += deltaM[p.rideMover].dy;
     }
   }
 
-  // 플레이어 물리
+  // 버블에 갇힌 플레이어: 물리 무시, 위로 둥실 → 스페이스 10번 눌러 탈출
   for (const p of players) {
+    if (!p.trapped) continue;
+    p.vx = 0; p.vy = 0; p.rideMover = -1; p.carrier = -1;
+    if (p.y > 66) p.y -= 2.2; else p.y = 66 + Math.sin(room.tick * 0.09) * 7;
+    p.x += Math.sin(room.tick * 0.05 + p.id) * 0.6;
+    if (p.x < 0) p.x = 0; if (p.x + P_SIZE > WORLD_W) p.x = WORLD_W - P_SIZE;
+    if (p.upEdge) {
+      p.trapTaps++;
+      if (p.trapTaps >= 10) { p.trapped = false; p.trapTaps = 0; p.vy = -4; }
+    }
+  }
+
+  // 일반 플레이어 물리
+  for (const p of players) {
+    if (p.trapped) continue;
     p.vx = 0;
     if (p.input.left) p.vx -= MOVE_SPEED;
     if (p.input.right) p.vx += MOVE_SPEED;
@@ -151,35 +184,70 @@ function stepRoom(room) {
     }
   }
 
-  // 친구 머리 밟고 올라서기 (부스트)
+  // 스택: 친구 머리 위 착지 판정 → carrier 설정(한번 붙으면 유지, 아래 참조에서 해제)
   for (const p of players) {
+    if (p.trapped) continue;
     for (const q of players) {
-      if (p === q) continue;
-      if (p.vy >= 0 && overlap(p.x, p.y, P_SIZE, P_SIZE, q.x, q.y, P_SIZE, P_SIZE)) {
-        if (p.y + P_SIZE - p.vy <= q.y + 8) {
-          p.y = q.y - P_SIZE; p.vy = 0; p.onGround = true; p.x += q.vx;
-        }
+      if (p === q || q.trapped) continue;
+      const horiz = p.x < q.x + P_SIZE && p.x + P_SIZE > q.x;
+      if (horiz && p.vy >= 0 && p.y + P_SIZE >= q.y - 2 && p.y + P_SIZE <= q.y + 14 && p.y < q.y) {
+        p.y = q.y - P_SIZE; p.vy = 0; p.onGround = true; p.carrier = q.id;
       }
     }
   }
 
-  // 점프 (코요테 타임 + 점프 버퍼) — 방향키와 완전히 독립적으로 처리
+  // 점프 (코요테 타임 + 점프 버퍼) — 방향키와 독립. 점프하면 목마에서 내려옴
   for (const p of players) {
+    if (p.trapped) continue;
     if (p.onGround) p.coyote = COYOTE; else if (p.coyote > 0) p.coyote--;
-    const upEdge = p.input.up && !p.prevUp;
-    p.prevUp = p.input.up;
-    if (upEdge) p.jumpBuf = JUMP_BUFFER; else if (p.jumpBuf > 0) p.jumpBuf--;
+    if (p.upEdge) p.jumpBuf = JUMP_BUFFER; else if (p.jumpBuf > 0) p.jumpBuf--;
     if (p.jumpBuf > 0 && p.coyote > 0) {
-      p.vy = JUMP_V; p.onGround = false; p.coyote = 0; p.jumpBuf = 0;
+      p.vy = JUMP_V; p.onGround = false; p.coyote = 0; p.jumpBuf = 0; p.carrier = -1;
     }
   }
 
+  // 목마 태우기: 아래 사람의 이동을 위 사람에게 전달 → 점프/이동해도 안 떨어지고 같이
+  const byId = new Map(players.map(p => [p.id, p]));
+  const order = [...players].sort((a, b) => b.y - a.y);  // 아래(y 큰) 사람 먼저 확정
+  for (const p of order) {
+    if (p.trapped || p.carrier < 0) continue;
+    const b = byId.get(p.carrier);
+    if (!b || b.trapped) { p.carrier = -1; continue; }
+    const horiz = p.x < b.x + P_SIZE && p.x + P_SIZE > b.x;
+    const above = p.y <= b.y - 4;             // 아직 머리 위쪽인가
+    if (!horiz || !above) { p.carrier = -1; continue; }   // 옆으로 벗어나거나 떨어지면 해제
+    p.x += (b.x - b._px);                     // 아래 사람이 이동한 만큼 같이
+    if (p.x < 0) p.x = 0; if (p.x + P_SIZE > WORLD_W) p.x = WORLD_W - P_SIZE;
+    p.y = b.y - P_SIZE;                        // 항상 머리 위에 붙어서
+    p.vy = 0;                                  // 낙하속도 누적 방지
+    p.onGround = true; p.coyote = COYOTE;      // 위 사람도 언제든 점프해서 내릴 수 있게
+  }
+
+  // 버블 발사
+  for (const p of players) {
+    if (p.trapped) continue;
+    if (p.shootCd > 0) p.shootCd--;
+    if (p.shootEdge && p.shootCd <= 0) { spawnBubble(room, p); p.shootCd = 25; }
+  }
+  // 버블 이동 + 충돌(상대를 가둠)
+  for (const b of room.bubbles) { b.x += b.vx; b.life--; }
+  for (const b of room.bubbles) {
+    if (b.hit) continue;
+    for (const q of players) {
+      if (q.id === b.owner || q.trapped) continue;
+      if (overlap(b.x - 16, b.y - 16, 32, 32, q.x, q.y, P_SIZE, P_SIZE)) {
+        q.trapped = true; q.trapTaps = 0; q.vx = 0; q.vy = 0; q.carrier = -1; b.hit = true; break;
+      }
+    }
+  }
+  room.bubbles = room.bubbles.filter(b => !b.hit && b.life > 0 && b.x > -30 && b.x < WORLD_W + 30);
+
   // 낙사
-  for (const p of players) if (p.y > WORLD_H + 80) respawn(p, lvl);
+  for (const p of players) if (!p.trapped && p.y > WORLD_H + 80) respawn(p, lvl);
 
   // 가시 (밟으면 죽고 그 사람만 시작지점 부활)
   for (const p of players) {
-    if (p.blink > 0) continue;
+    if (p.trapped || p.blink > 0) continue;
     for (const sp of (lvl.spikes || [])) {
       if (overlap(p.x + 4, p.y + 4, P_SIZE - 8, P_SIZE - 8, sp.x, sp.y, sp.w, sp.h)) { kill(p, lvl); break; }
     }
@@ -208,7 +276,7 @@ function updateRain(room, lvl, players) {
   for (const f of room.fallers) f.y += f.vy;
   // 충돌 → 죽음
   for (const p of players) {
-    if (p.blink > 0) continue;
+    if (p.trapped || p.blink > 0) continue;
     for (const f of room.fallers) {
       if (overlap(p.x + 3, p.y + 3, P_SIZE - 6, P_SIZE - 6, f.x, f.y, f.w, f.h)) {
         kill(p, lvl); f.y = WORLD_H + 999; break;
@@ -288,6 +356,7 @@ function serializeState(room) {
     door: lvl.door || null, doorOpen: room.doorOpen,
     keys: room.keys, message: room.message,
     fallers: room.fallers.map(f => ({ id: f.id, x: Math.round(f.x), y: Math.round(f.y), w: f.w, h: f.h })),
+    bubbles: room.bubbles.map(b => ({ id: b.id, x: Math.round(b.x), y: Math.round(b.y) })),
     boss: room.boss ? {
       x: Math.round(room.boss.x), y: lvl.boss.y, w: lvl.boss.w, h: lvl.boss.h,
       hp: room.boss.hp, maxHp: room.boss.maxHp,
@@ -298,6 +367,7 @@ function serializeState(room) {
       id: p.id, name: p.name, color: p.color,
       x: Math.round(p.x), y: Math.round(p.y), facing: p.facing,
       blink: p.blink > 0 ? 1 : 0, deaths: p.deaths || 0,
+      trapped: p.trapped ? 1 : 0, taps: p.trapTaps || 0,
     })),
   };
 }
@@ -346,9 +416,11 @@ wss.on('connection', (ws) => {
       player = {
         id: nextId++, name: (msg.name || 'Player').slice(0, 12),
         color: COLORS[room.nextColor++ % COLORS.length], ws,
-        input: { left: false, right: false, up: false }, prevUp: false,
-        facing: 1, x: 0, y: 0, vx: 0, vy: 0, onGround: false,
+        input: { left: false, right: false, up: false, shoot: false },
+        prevUp: false, prevShoot: false, upEdge: false, shootEdge: false,
+        facing: 1, x: 0, y: 0, vx: 0, vy: 0, _px: 0, onGround: false,
         rideMover: -1, coyote: 0, jumpBuf: 0, blink: 0, deaths: 0,
+        shootCd: 0, trapped: false, trapTaps: 0, carrier: -1,
       };
       respawn(player, lvl);
       room.players.set(player.id, player);
@@ -359,6 +431,7 @@ wss.on('connection', (ws) => {
       player.input.left = !!msg.left;
       player.input.right = !!msg.right;
       player.input.up = !!msg.up;
+      player.input.shoot = !!msg.shoot;
     }
   });
 
